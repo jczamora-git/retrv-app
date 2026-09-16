@@ -1,0 +1,102 @@
+{
+  "rules": {
+    "profiles": {
+      ".read": true,
+      "$uid": {
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    },
+    "usernames": {
+      ".read": true,
+      ".write": "auth != null"
+    },
+    "lost_found": {
+      ".read": true,
+      ".write": "auth != null",
+      ".indexOn": ["createdAt", "updatedAt", "authorId", "status", "category", "type"]
+    },
+    "posts": {
+      ".read": true,
+      ".write": "auth != null",
+      ".indexOn": ["createdAt", "updatedAt", "authorId", "status", "category", "type", "subCategory", "meritRecipientId"]
+    },
+    "subcategories": {
+      ".read": true,
+      "$category": {
+        "$normalizedKey": {
+          ".write": "auth != null && newData.exists()",
+          ".validate": "newData.hasChildren(['name', 'normalizedKey'])",
+          "name": {
+            ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 80 && (!data.exists() || newData.val() === data.val())"
+          },
+          "normalizedKey": {
+            ".validate": "newData.isString() && newData.val() === $normalizedKey"
+          },
+          "createdAt": {
+            ".validate": "newData.isNumber()"
+          },
+          "$other": {
+            ".validate": false
+          }
+        }
+      }
+    },
+    "comments": {
+      ".read": true,
+      ".write": "auth != null",
+      "$postId": {
+        ".indexOn": ["createdAt", "authorId", "parentCommentId"]
+      }
+    },
+    "helpful": {
+      ".read": true,
+      ".write": "auth != null"
+    },
+    "userHelpful": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    },
+    "achievements": {
+      ".read": true,
+      ".write": "auth != null",
+      ".indexOn": ["recipientId", "postId", "type", "createdAt"]
+    },
+    "conversations": {
+      ".read": "auth != null",
+      ".write": "auth != null",
+      "$conversationId": {
+        ".read": "auth != null && (data.child('participantIds/0').val() === auth.uid || data.child('participantIds/1').val() === auth.uid)",
+        ".write": "auth != null"
+      }
+    },
+    "userConversations": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null",
+        ".indexOn": ["lastMessageAt", "updatedAt"]
+      }
+    },
+    "conversationThreads": {
+      "$conversationId": {
+        ".read": "auth != null",
+        ".write": "auth != null"
+      }
+    },
+    "messages": {
+      "$conversationId": {
+        ".read": "auth != null && (root.child('conversations/' + $conversationId + '/participantIds/0').val() === auth.uid || root.child('conversations/' + $conversationId + '/participantIds/1').val() === auth.uid)",
+        ".write": "auth != null",
+        ".indexOn": ["createdAt", "threadId", "senderId"]
+      }
+    },
+    "notifications": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null",
+        ".indexOn": ["createdAt", "read"]
+      }
+    }
+  }
+}
