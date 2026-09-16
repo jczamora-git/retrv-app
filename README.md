@@ -236,3 +236,4 @@ Item is returned
 Post is marked RESOLVED
         ↓
 Helper receives Community Merit
+```
