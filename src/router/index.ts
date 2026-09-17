@@ -5,7 +5,8 @@ import { useAuth } from '../composables/useAuth';
 const routes: Array<RouteRecordRaw> = [
   {
     path: '/',
-    redirect: '/tabs/home'
+    name: 'Landing',
+    component: () => import('../views/LandingPage.vue')
   },
   {
     path: '/auth',
@@ -180,6 +181,7 @@ router.beforeEach(async (to, from, next) => {
   await initializeAuthSession();
 
   const isPublicRoute =
+    to.path === '/' ||
     to.path === '/auth' ||
     to.path === '/onboarding' ||
     to.path.startsWith('/legal') ||

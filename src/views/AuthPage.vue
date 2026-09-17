@@ -632,14 +632,32 @@ const handleCreateAccount = async () => {
 
 <style scoped>
 .auth-page {
-  --background: var(--app-background, #F7F8FA);
+  color-scheme: light !important;
+  --background: #f1f5f9;
+  --ion-background-color: #f1f5f9;
+  --ion-text-color: #202124;
+  --app-bg: #ffffff;
+  --app-text-primary: #202124;
+  --app-text-secondary: #72777D;
+  --app-text-tertiary: #9AA0A6;
+  --app-text-muted: #9AA0A6;
+  --app-input-background: #F2F4F7;
+  --app-input-border: rgba(20, 25, 30, 0.08);
+  --app-border: rgba(20, 25, 30, 0.08);
+  --app-surface: #ffffff;
+  --app-surface-secondary: #F2F4F7;
+  --app-primary: #2640DB;
+  --app-primary-deep: #0019B7;
+  --app-primary-accent: #3B82F6;
+  --app-primary-soft: rgba(38, 64, 219, 0.10);
+  --app-primary-subtle: rgba(38, 64, 219, 0.05);
 }
 
 .auth-content {
-  --background: var(--app-background, #F7F8FA);
+  --background: transparent;
 }
 
-/* Outer layout wrapper - centered vertically on tall screens, scrollable on short */
+/* Outer layout wrapper with background image */
 .auth-outer-wrap {
   display: flex;
   flex-direction: column;
@@ -650,16 +668,28 @@ const handleCreateAccount = async () => {
   min-height: 100%;
   min-height: 100dvh;
   min-height: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
-  padding: max(24px, calc(env(safe-area-inset-top, 0px) + 24px)) 24px max(24px, calc(env(safe-area-inset-bottom, 0px) + 24px));
+  padding: max(24px, calc(env(safe-area-inset-top, 0px) + 24px)) 20px max(24px, calc(env(safe-area-inset-bottom, 0px) + 24px));
+  background-image: url('/login-bg.png');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
 }
 
-/* Center column container constrained to 380px-420px */
+/* Center auth card with drop shadow (Forced Light Mode) */
 .auth-center-container {
   width: 100%;
-  max-width: 400px;
+  max-width: 410px;
   margin: auto 0;
   display: flex;
   flex-direction: column;
+  background: #ffffff;
+  color: #202124;
+  border-radius: 24px;
+  padding: 36px 32px 32px;
+  box-shadow: 0 20px 45px -10px rgba(15, 23, 42, 0.22), 0 10px 25px -5px rgba(15, 23, 42, 0.12);
+  box-sizing: border-box;
+  border: 1px solid rgba(255, 255, 255, 0.9);
 }
 
 /* Branding Header */
@@ -1022,5 +1052,33 @@ const handleCreateAccount = async () => {
   font-size: 12px;
   color: var(--app-text-muted, #9AA0A6);
   line-height: 1.4;
+}
+
+/* Responsive: Seamless Flat Mobile Layout (<= 768px) */
+@media (max-width: 768px) {
+  .auth-outer-wrap {
+    background-image: none;
+    background-color: #ffffff;
+    padding: max(20px, calc(env(safe-area-inset-top, 0px) + 16px)) 24px max(24px, calc(env(safe-area-inset-bottom, 0px) + 16px));
+    justify-content: center;
+  }
+
+  .auth-center-container {
+    background: transparent;
+    box-shadow: none;
+    border: none;
+    border-radius: 0;
+    padding: 8px 0 20px;
+    max-width: 100%;
+    margin: 0 auto;
+  }
+
+  .auth-brand {
+    margin-bottom: 24px;
+  }
+
+  .auth-logo {
+    filter: drop-shadow(0 4px 10px rgba(22, 55, 199, 0.16));
+  }
 }
 </style>

@@ -1,7 +1,7 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.jc.retrv',
+  appId: 'com.retrv.jeiziproductions',
   appName: 'Retrv',
   webDir: 'dist'
 };

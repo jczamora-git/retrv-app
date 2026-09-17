@@ -227,6 +227,11 @@ CREATE POLICY "Allow public delete on lost_found" ON public.lost_found FOR DELET
 ALTER TABLE public.posts ADD COLUMN IF NOT EXISTS client_request_id UUID;
 ALTER TABLE public.comments ADD COLUMN IF NOT EXISTS client_request_id UUID;
 ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS client_request_id UUID;
+ALTER TABLE public.achievements ADD COLUMN IF NOT EXISTS post_id TEXT;
+ALTER TABLE public.achievements ADD COLUMN IF NOT EXISTS badge_id TEXT;
+ALTER TABLE public.achievements ADD COLUMN IF NOT EXISTS awarded_by TEXT;
+ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT false;
+ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS read BOOLEAN DEFAULT false;
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_posts_author_client_req ON public.posts(author_id, client_request_id) WHERE client_request_id IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_sender_client_req ON public.messages(sender_id, client_request_id) WHERE client_request_id IS NOT NULL;

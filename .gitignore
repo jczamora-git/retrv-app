@@ -6,6 +6,9 @@
 .tmp
 *.tmp
 *.tmp.*
+.temp/
+**/.temp/
+
 *.sublime-project
 *.sublime-workspace
 .DS_Store
@@ -21,7 +24,8 @@ npm-debug.log*
 .env.*
 !.env.example
 
-/.idea
+.idea/
+**/.idea/
 /.ionic
 /.sass-cache
 /.sourcemaps
@@ -40,3 +44,5 @@ server/data/
 *.aab
 *.apk
 *.pepk
+retrv-keys/
+retrv-keys

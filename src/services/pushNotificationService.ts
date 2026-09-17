@@ -22,8 +22,14 @@ export const checkPushPermission = async (): Promise<'granted' | 'denied' | 'pro
 
   try {
     const status = await PushNotifications.checkPermissions();
-    if (status.receive === 'granted') return 'granted';
-    if (status.receive === 'denied') return 'denied';
+    if (status.receive === 'granted') {
+      if (import.meta.env.DEV) console.log('[Push] permission: granted');
+      return 'granted';
+    }
+    if (status.receive === 'denied') {
+      if (import.meta.env.DEV) console.log('[Push] permission: denied');
+      return 'denied';
+    }
     return 'prompt';
   } catch (err) {
     console.warn('[pushNotificationService] Check permission error:', err);
@@ -33,6 +39,7 @@ export const checkPushPermission = async (): Promise<'granted' | 'denied' | 'pro
 
 /**
  * Prompt user for push notification permission (Android 13+ / iOS) and register.
+ * Triggered explicitly from Settings > Notifications > Enable Notifications.
  */
 export const requestPushPermission = async (userId: string): Promise<boolean> => {
   if (!isNativePushSupported()) {
@@ -54,10 +61,14 @@ export const requestPushPermission = async (userId: string): Promise<boolean> =>
     }
 
     if (permStatus.receive === 'granted') {
+      if (import.meta.env.DEV) console.log('[Push] permission: granted');
+      await initPushNotifications(userId, currentRouter);
       await PushNotifications.register();
       return true;
+    } else {
+      if (import.meta.env.DEV) console.log('[Push] permission: denied');
+      return false;
     }
-    return false;
   } catch (err) {
     console.warn('[pushNotificationService] Request permission error:', err);
     return false;
@@ -74,7 +85,7 @@ export const savePushToken = async (userId: string, tokenString: string): Promis
     const platform = Capacitor.getPlatform();
     const now = new Date().toISOString();
 
-    await supabase.from('push_tokens').upsert(
+    const { error } = await supabase.from('push_tokens').upsert(
       {
         user_id: userId,
         token: tokenString,
@@ -83,6 +94,10 @@ export const savePushToken = async (userId: string, tokenString: string): Promis
       },
       { onConflict: 'token' }
     );
+
+    if (!error && import.meta.env.DEV) {
+      console.log('[Push] token stored');
+    }
   } catch (err) {
     if (import.meta.env.DEV) {
       console.warn('[pushNotificationService] Token save note:', err);
@@ -97,10 +112,24 @@ export const removePushToken = async (userId: string): Promise<void> => {
   if (!userId) return;
 
   try {
-    // Unassociate tokens for this user
     await supabase.from('push_tokens').delete().eq('user_id', userId);
   } catch (err) {
-    console.warn('[pushNotificationService] Token remove note:', err);
+    if (import.meta.env.DEV) {
+      console.warn('[pushNotificationService] Token remove note:', err);
+    }
+  }
+};
+
+/**
+ * Clean up active listeners on user sign-out.
+ */
+export const cleanupPushListeners = async () => {
+  if (!isNativePushSupported()) return;
+  try {
+    await PushNotifications.removeAllListeners();
+    isInitialized = false;
+  } catch (err) {
+    console.warn('[pushNotificationService] Cleanup error:', err);
   }
 };
 
@@ -112,6 +141,10 @@ export const handleNotificationAction = (action: ActionPerformed) => {
   const type = data.type;
   const conversationId = data.conversation_id || data.conversationId;
   const postId = data.post_id || data.postId;
+
+  if (import.meta.env.DEV) {
+    console.log('[Push] notification tapped', { type, conversationId, postId });
+  }
 
   if (!currentRouter) return;
 
@@ -127,7 +160,7 @@ export const handleNotificationAction = (action: ActionPerformed) => {
 };
 
 /**
- * Initialize Capacitor Push Notifications listeners on app startup for the signed-in user.
+ * Initialize Capacitor Push Notifications listeners for the signed-in user.
  */
 export const initPushNotifications = async (userId: string, router?: any) => {
   if (router) {
@@ -142,6 +175,9 @@ export const initPushNotifications = async (userId: string, router?: any) => {
   try {
     // 1. Listen for registration success
     await PushNotifications.addListener('registration', async (token: Token) => {
+      if (import.meta.env.DEV) {
+        console.log('[Push] registration success');
+      }
       if (token?.value) {
         await savePushToken(userId, token.value);
       }
@@ -152,10 +188,10 @@ export const initPushNotifications = async (userId: string, router?: any) => {
       console.warn('[pushNotificationService] Registration error:', error);
     });
 
-    // 3. Listen for foreground notification arrival (Supabase Realtime updates UI; avoid duplicate noisy banners)
+    // 3. Listen for foreground notification arrival
     await PushNotifications.addListener('pushNotificationReceived', (notification: PushNotificationSchema) => {
       if (import.meta.env.DEV) {
-        console.log('[pushNotificationService] Push received in foreground:', notification);
+        console.log('[Push] notification received', notification.title);
       }
     });
 
@@ -164,7 +200,7 @@ export const initPushNotifications = async (userId: string, router?: any) => {
       handleNotificationAction(action);
     });
 
-    // 5. If permission already granted, register immediately
+    // 5. If permission already granted, register to ensure token is fresh
     const permStatus = await PushNotifications.checkPermissions();
     if (permStatus.receive === 'granted') {
       await PushNotifications.register();

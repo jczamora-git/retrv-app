@@ -1,7 +1,8 @@
 import { ref, computed } from "vue";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 import { supabase } from "../utils/supabase";
-import { disconnectSocket, getApiServerUrl } from "../services/socket";
+import { getApiServerUrl } from "../utils/apiConfig";
+import { cleanupPushListeners } from "../services/pushNotificationService";
 import { useProfiles } from "./useProfiles";
 import type { Profile, ProfileFormData } from "../types/profile";
 
@@ -636,7 +637,7 @@ export function useAuth() {
       currentUser.value = null;
       currentProfile.value = null;
       authInitPromise = null;
-      disconnectSocket();
+      cleanupPushListeners().catch(() => {});
     }
   };
 

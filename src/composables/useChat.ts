@@ -1,6 +1,10 @@
 import { ref, computed, onUnmounted } from 'vue';
 import { supabase } from '../utils/supabase';
-import { useChatSocket } from './useChatSocket';
+import {
+  fetchSupabaseThreads,
+  fetchSupabaseConversationMessages,
+  sendSupabaseMessage
+} from '../services/chatService';
 import { useMessageUnread } from './useMessageUnread';
 import { currentAppUserId, sessionUid } from './useAuth';
 import { generateClientRequestId } from '../utils/idempotency';
@@ -8,11 +12,6 @@ import type { ChatMessage } from '../types/message';
 import type { ConversationThread } from '../types/conversation';
 
 export function useChat(conversationId: string, initialThreadId = 'general') {
-  const {
-    sendMessage,
-    getConversationMessages,
-    getThreads
-  } = useChatSocket();
   const { setConversationRead } = useMessageUnread();
 
   const activeThreadId = ref<string>(initialThreadId || 'general');
@@ -46,7 +45,7 @@ export function useChat(conversationId: string, initialThreadId = 'general') {
   };
 
   const loadThreads = async (): Promise<ConversationThread[]> => {
-    const list = await getThreads(conversationId);
+    const list = await fetchSupabaseThreads(conversationId);
     threads.value = list;
     return list;
   };
@@ -62,7 +61,7 @@ export function useChat(conversationId: string, initialThreadId = 'general') {
     try {
       const [currentThreads, fetchedMessages] = await Promise.all([
         loadThreads(),
-        getConversationMessages(conversationId, targetThreadId, 50)
+        fetchSupabaseConversationMessages(conversationId, targetThreadId, 50)
       ]);
 
       // Reconcile fetched messages against map, clearing matched optimistic items
@@ -252,7 +251,7 @@ export function useChat(conversationId: string, initialThreadId = 'general') {
     sortAndSyncMessages();
 
     try {
-      const savedMsg = await sendMessage(
+      const savedMsg = await sendSupabaseMessage(
         conversationId,
         threadId,
         cleanText,

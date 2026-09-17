@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "174365684547",
+    "project_id": "retrv-app",
+    "storage_bucket": "retrv-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:174365684547:android:8cdd5f16c9e094c04875f6",
+        "android_client_info": {
+          "package_name": "com.retrv.jeiziproductions"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDr3KE48ZYrlnawlAd-4HC4msWVDHn8Bmc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

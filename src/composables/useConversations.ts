@@ -9,10 +9,9 @@ import {
   resetLocalConversationUnread
 } from './useMessageUnread';
 import {
-  useChatSocket,
-  onConversationUpdated,
-  onMessageNew
-} from './useChatSocket';
+  createOrGetSupabaseConversation,
+  fetchSupabaseConversationList
+} from '../services/chatService';
 import type { Conversation, ConversationThread, ConversationWithMeta } from '../types/conversation';
 import type { Profile } from '../types/profile';
 
@@ -83,8 +82,7 @@ export async function createOrGetConversation(
     avatarUrl: null
   };
 
-  const { createOrGetConversation: socketCreateOrGet } = useChatSocket();
-  const res = await socketCreateOrGet(
+  const res = await createOrGetSupabaseConversation(
     normalizedPostId,
     otherUserId,
     senderProfile,
@@ -115,10 +113,6 @@ export function useConversations() {
   const { currentProfile } = useAuth();
   const { getPostById } = usePosts();
   const { loadProfile } = useProfiles();
-  const {
-    getConversationList,
-    markConversationAsRead
-  } = useChatSocket();
 
   const resolveOtherProfile = async (
     otherUid: string,
@@ -185,7 +179,7 @@ export function useConversations() {
 
     inFlightConversationsPromise = (async () => {
       try {
-        const rawList = await getConversationList(myUid);
+        const rawList = await fetchSupabaseConversationList(myUid);
 
         const otherUids = rawList.map((c) => (c.participantIds || []).find((id: string) => id !== myUid));
         const postIds = rawList.map((c) => c.postId).filter(Boolean) as string[];
