@@ -1,10 +1,7 @@
 import { ref, computed } from 'vue';
-import { ref as dbRef, get } from 'firebase/database';
-import { db } from '../firebase';
 import { useAuth, getSessionUser, sessionUid } from './useAuth';
 import { usePosts } from './usePosts';
 import { useProfiles } from './useProfiles';
-import { getChatServerUrl } from '../services/socket';
 import {
   useChatSocket,
   onConversationUpdated,
@@ -16,7 +13,6 @@ import type { Profile } from '../types/profile';
 const conversations = ref<ConversationWithMeta[]>([]);
 const isConversationsLoading = ref(false);
 const hasConnectionError = ref(false);
-let globalListenerInitialized = false;
 let inFlightConversationsPromise: Promise<ConversationWithMeta[]> | null = null;
 
 export interface CreateConversationOptions {
@@ -28,10 +24,6 @@ export interface CreateConversationOptions {
   threadId?: string;
 }
 
-/**
- * Total unread messages count for current active user across all conversations.
- * Consumed by AppDock and page headers.
- */
 export const totalUnreadCount = computed<number>(() => {
   const myUid = sessionUid.value;
   if (!myUid) return 0;
@@ -47,10 +39,6 @@ export const totalUnreadCount = computed<number>(() => {
   }, 0);
 });
 
-/**
- * Shared helper to get or create a 1-to-1 conversation and target thread.
- * Guarantees ONE conversation per pair of users.
- */
 export async function createOrGetConversation(
   arg1: CreateConversationOptions | string,
   arg2?: string | null
@@ -138,18 +126,13 @@ export function useConversations() {
     markConversationAsRead
   } = useChatSocket();
 
-  /**
-   * Helper to resolve participant profile from cache, RTDB, or fallback.
-   */
   const resolveOtherProfile = async (
     otherUid: string,
     conv: Conversation
   ): Promise<Profile> => {
-    // 1. Check profile via shared cached loader first (canonical profile source)
     const loaded = await loadProfile(otherUid);
     if (loaded) return loaded;
 
-    // 2. Check embedded participantDetails if profile record not found directly
     if (conv.participantDetails && conv.participantDetails[otherUid]) {
       const details = conv.participantDetails[otherUid];
       return {
@@ -174,10 +157,6 @@ export function useConversations() {
     };
   };
 
-  /**
-   * Mark a conversation read:
-   * Sets unread count to 0 immediately in local state and updates Firebase RTDB.
-   */
   const markAsRead = (conversationId: string, threadId?: string) => {
     const myUid = sessionUid.value || currentProfile.value?.id;
     if (!myUid) return;
@@ -187,36 +166,14 @@ export function useConversations() {
     const target = conversations.value.find((c) => c.id === conversationId);
     if (target) {
       if (!target.unreadCounts) target.unreadCounts = {};
-      if (!threadId) {
-        target.unreadCounts[myUid] = 0;
-        target.unreadCount = 0;
-        target.unread = false;
-      } else if (target.threads && target.threads[threadId]) {
-        if (target.threads[threadId].unreadCounts) {
-          target.threads[threadId].unreadCounts![myUid] = 0;
-        }
-        // Recalculate sum
-        let sum = 0;
-        for (const t of Object.values(target.threads)) {
-          sum += t.unreadCounts?.[myUid] || 0;
-        }
-        target.unreadCounts[myUid] = sum;
-        target.unreadCount = sum;
-        target.unread = sum > 0;
-      }
+      target.unreadCounts[myUid] = 0;
+      target.unreadCount = 0;
+      target.unread = false;
     }
 
-    // Update in RTDB
-    markConversationAsRead(conversationId, threadId).catch((err) => {
-      if (import.meta.env.DEV) {
-        console.warn('[useConversations] markConversationAsRead warning:', err);
-      }
-    });
+    markConversationAsRead(conversationId, myUid).catch(() => {});
   };
 
-  /**
-   * Check if a conversation has unread messages for current user.
-   */
   const isConversationUnread = (conv: Conversation): boolean => {
     const myUid = sessionUid.value || currentProfile.value?.id;
     if (!myUid) return false;
@@ -232,84 +189,6 @@ export function useConversations() {
     return conv.lastMessageAt > lastRead;
   };
 
-  /**
-   * Sort conversations by latest activity descending.
-   */
-  const sortConversations = () => {
-    conversations.value.sort(
-      (a, b) => (b.lastMessageAt || b.updatedAt) - (a.lastMessageAt || a.updatedAt)
-    );
-  };
-
-  /**
-   * Handle incoming conversation update.
-   */
-  const handleConversationUpdated = async (rawConv: Conversation) => {
-    const myUid = sessionUid.value || currentProfile.value?.id;
-    if (!myUid || !rawConv || !rawConv.participantIds?.includes(myUid)) return;
-
-    const unreadCount =
-      typeof rawConv.unreadCounts?.[myUid] === 'number'
-        ? rawConv.unreadCounts[myUid]
-        : isConversationUnread(rawConv)
-        ? 1
-        : 0;
-
-    const existingIndex = conversations.value.findIndex((c) => c.id === rawConv.id);
-    if (existingIndex !== -1) {
-      const existing = conversations.value[existingIndex];
-      existing.lastMessage = rawConv.lastMessage;
-      existing.lastMessageAt = rawConv.lastMessageAt;
-      existing.lastMessageSenderId = rawConv.lastMessageSenderId;
-      existing.lastMessageThreadId = rawConv.lastMessageThreadId;
-      existing.lastMessageThreadTitle = rawConv.lastMessageThreadTitle;
-      existing.updatedAt = rawConv.updatedAt;
-      existing.unreadCounts = rawConv.unreadCounts;
-      existing.unreadCount = unreadCount;
-      existing.unread = unreadCount > 0;
-      if (rawConv.threads) existing.threads = rawConv.threads;
-
-      if (rawConv.participantDetails) {
-        existing.participantDetails = rawConv.participantDetails;
-        const otherUid = rawConv.participantIds.find((id) => id !== myUid);
-        if (otherUid && rawConv.participantDetails[otherUid]) {
-          existing.otherParticipant = {
-            id: otherUid,
-            name: rawConv.participantDetails[otherUid].name,
-            username: rawConv.participantDetails[otherUid].username,
-            phone: '',
-            avatarUrl: rawConv.participantDetails[otherUid].avatarUrl || null,
-            createdAt: 0,
-            updatedAt: 0
-          };
-        }
-      }
-
-      sortConversations();
-    } else {
-      const otherUid = rawConv.participantIds.find((id) => id !== myUid);
-      const otherProfile = otherUid ? await resolveOtherProfile(otherUid, rawConv) : null;
-      let post = null;
-      if (rawConv.postId) {
-        post = await getPostById(rawConv.postId);
-      }
-
-      const newConvMeta: ConversationWithMeta = {
-        ...rawConv,
-        otherParticipant: otherProfile,
-        post,
-        unread: unreadCount > 0,
-        unreadCount
-      };
-
-      conversations.value.unshift(newConvMeta);
-      sortConversations();
-    }
-  };
-
-  /**
-   * Load conversation list on-demand from Firebase Realtime Database.
-   */
   const subscribeToConversations = async (): Promise<ConversationWithMeta[]> => {
     const myUid = sessionUid.value || currentProfile.value?.id;
     if (!myUid) return [];
@@ -323,33 +202,12 @@ export function useConversations() {
     }
     hasConnectionError.value = false;
 
-    const startTime = performance.now();
-
     inFlightConversationsPromise = (async () => {
       try {
-        const rawList = await getConversationList();
+        const rawList = await getConversationList(myUid);
 
-        // Deduplicate conversations so only ONE row appears per other participant
-        const userPairMap = new Map<string, Conversation>();
-        for (const rawConv of rawList) {
-          const otherUid = (rawConv.participantIds || []).find((id) => id !== myUid);
-          if (!otherUid) continue;
-
-          if (!userPairMap.has(otherUid)) {
-            userPairMap.set(otherUid, rawConv);
-          } else {
-            const current = userPairMap.get(otherUid)!;
-            if ((rawConv.lastMessageAt || 0) > (current.lastMessageAt || 0)) {
-              userPairMap.set(otherUid, rawConv);
-            }
-          }
-        }
-
-        const deduplicatedList = Array.from(userPairMap.values());
-
-        // Batch load all participant profiles and posts in parallel
-        const otherUids = deduplicatedList.map((c) => (c.participantIds || []).find((id) => id !== myUid));
-        const postIds = deduplicatedList.map((c) => c.postId).filter(Boolean) as string[];
+        const otherUids = rawList.map((c) => (c.participantIds || []).find((id: string) => id !== myUid));
+        const postIds = rawList.map((c) => c.postId).filter(Boolean) as string[];
 
         await Promise.all([
           useProfiles().loadProfiles(otherUids),
@@ -358,8 +216,8 @@ export function useConversations() {
 
         const loaded: ConversationWithMeta[] = [];
 
-        for (const rawConv of deduplicatedList) {
-          const otherUid = (rawConv.participantIds || []).find((id) => id !== myUid);
+        for (const rawConv of rawList) {
+          const otherUid = (rawConv.participantIds || []).find((id: string) => id !== myUid);
           const otherProfile = otherUid ? await resolveOtherProfile(otherUid, rawConv) : null;
           let post = null;
           if (rawConv.postId) {
@@ -386,16 +244,8 @@ export function useConversations() {
         conversations.value = loaded;
         hasConnectionError.value = false;
 
-        if (import.meta.env.DEV) {
-          const elapsed = (performance.now() - startTime).toFixed(1);
-          console.log(`[Perf] Messages: ${elapsed} ms (${loaded.length} conversations)`);
-        }
-
         return loaded;
       } catch (err) {
-        if (import.meta.env.DEV) {
-          console.error('[useConversations] Failed to load conversations:', err);
-        }
         if (conversations.value.length === 0) {
           hasConnectionError.value = true;
         }

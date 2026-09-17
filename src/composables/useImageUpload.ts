@@ -1,7 +1,7 @@
 import { ref } from 'vue';
 import { Capacitor } from '@capacitor/core';
 import { genUploader } from 'uploadthing/client';
-import { auth } from '../firebase';
+import { supabase } from '../utils/supabase';
 import { getAuthenticatedUser, isDevBypassEnabled, getDevSession } from './useAuth';
 
 export type OurFileRouter = {
@@ -206,21 +206,16 @@ async function getUploadHeaders(): Promise<Record<string, string>> {
     }
   }
 
-  let user = auth.currentUser;
-  if (!user) {
-    user = await getAuthenticatedUser();
-  }
-
-  if (user && typeof user.getIdToken === 'function') {
-    try {
-      const token = await user.getIdToken();
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) {
       return {
-        Authorization: `Bearer ${token}`
+        Authorization: `Bearer ${session.access_token}`
       };
-    } catch (err) {
-      if (import.meta.env.DEV) {
-        console.warn('[UploadThing] Failed to get Firebase ID token:', err);
-      }
+    }
+  } catch (err) {
+    if (import.meta.env.DEV) {
+      console.warn('[UploadThing] Failed to get session token:', err);
     }
   }
 

@@ -1,16 +1,14 @@
 import { ref, onMounted, onUnmounted } from "vue";
-import { ref as dbRef, onValue, get } from "firebase/database";
-import { db } from "../firebase";
+import { supabase } from "../utils/supabase";
 import {
   MAIN_CATEGORIES,
   normalizeCategoryKey,
   getCategoryConfig
 } from "../config/categories";
 
-// Global cache for real-time dynamic subcategories from Firebase: { [normCatKey]: { [normSubKey]: string } }
 const customSubcategoriesByCat = ref<Record<string, Record<string, string>>>({});
 let listenerConsumers = 0;
-let unsubscribe: (() => void) | null = null;
+let realtimeChannel: any = null;
 
 export interface ResolvedCustomSubcategory {
   name: string;
@@ -19,7 +17,6 @@ export interface ResolvedCustomSubcategory {
   isNew: boolean;
 }
 
-/** Resolve a local choice without writing an unpublished option to the shared registry. */
 export async function resolveCustomSubcategory(
   categoryName: string,
   rawSubCategory: string
@@ -40,59 +37,63 @@ export async function resolveCustomSubcategory(
     return { name: matchedDefault || cachedName, normalizedKey, categoryKey, isNew: false };
   }
 
-  const snap = await get(dbRef(db, `subcategories/${categoryKey}/${normalizedKey}`));
-  if (snap.exists()) {
-    const value = snap.val();
-    if (typeof value?.name !== "string" || normalizeCategoryKey(value.name) !== normalizedKey) {
-      throw new Error("Could not load this subcategory. Please try again.");
+  try {
+    const { data } = await supabase
+      .from("subcategories")
+      .select("name, normalized_key")
+      .eq("category_key", categoryKey)
+      .eq("normalized_key", normalizedKey)
+      .maybeSingle();
+
+    if (data && typeof data.name === "string") {
+      const name = data.name.trim();
+      customSubcategoriesByCat.value[categoryKey] ||= {};
+      customSubcategoriesByCat.value[categoryKey][normalizedKey] = name;
+      return { name, normalizedKey, categoryKey, isNew: false };
     }
-    const name = value.name.trim();
-    customSubcategoriesByCat.value[categoryKey] ||= {};
-    customSubcategoriesByCat.value[categoryKey][normalizedKey] = name;
-    return { name, normalizedKey, categoryKey, isNew: false };
-  }
+  } catch {}
 
   return { name: trimmed, normalizedKey, categoryKey, isNew: true };
 }
 
 export function useCategories() {
-  const initSubcategoriesListener = () => {
-    if (unsubscribe) return;
-
-    const subcatRef = dbRef(db, "subcategories");
-    unsubscribe = onValue(
-      subcatRef,
-      (snapshot) => {
-        if (snapshot.exists()) {
-          const val = snapshot.val();
-          const mapped: Record<string, Record<string, string>> = {};
-          Object.entries(val).forEach(([category, subMap]) => {
-            const catKey = getCategoryConfig(category)?.key || normalizeCategoryKey(category);
-            if (!catKey) return;
+  const fetchSubcategories = async () => {
+    try {
+      const { data } = await supabase.from("subcategories").select("*");
+      if (data && Array.isArray(data)) {
+        const mapped: Record<string, Record<string, string>> = {};
+        data.forEach((item) => {
+          const catKey = item.category_key;
+          const subKey = item.normalized_key;
+          if (catKey && subKey && item.name) {
             mapped[catKey] ||= {};
-            if (typeof subMap === "object" && subMap !== null) {
-              Object.values(subMap).forEach((item) => {
-                if (item && typeof item.name === "string") {
-                  const subKey = normalizeCategoryKey(item.name);
-                  if (subKey) mapped[catKey][subKey] ||= item.name.trim();
-                }
-              });
-            }
-          });
-          customSubcategoriesByCat.value = mapped;
-        } else {
-          customSubcategoriesByCat.value = {};
-        }
-      },
-      (err) => {
-        console.warn("Subcategories listener error:", err);
+            mapped[catKey][subKey] = item.name.trim();
+          }
+        });
+        customSubcategoriesByCat.value = mapped;
       }
-    );
+    } catch (err) {
+      console.warn("[useCategories] Failed fetching subcategories:", err);
+    }
   };
 
-  /**
-   * Get all subcategories for a category (default + custom, merged and deduplicated)
-   */
+  const initSubcategoriesListener = () => {
+    fetchSubcategories();
+
+    if (!realtimeChannel) {
+      try {
+        realtimeChannel = supabase
+          .channel("public:subcategories")
+          .on("postgres_changes", { event: "*", schema: "public", table: "subcategories" }, () => {
+            fetchSubcategories();
+          })
+          .subscribe();
+      } catch (err) {
+        console.warn("[useCategories] Realtime subscription note:", err);
+      }
+    }
+  };
+
   const getSubcategoriesForCategory = (categoryName: string): string[] => {
     const mainCat = getCategoryConfig(categoryName);
     const normCatKey = mainCat?.key || normalizeCategoryKey(categoryName);
@@ -103,7 +104,6 @@ export function useCategories() {
     const seenNormKeys = new Set<string>();
     const result: string[] = [];
 
-    // Add defaults first
     defaults.forEach((sub) => {
       const k = normalizeCategoryKey(sub);
       if (k && !seenNormKeys.has(k)) {
@@ -112,7 +112,6 @@ export function useCategories() {
       }
     });
 
-    // Add custom subcategories
     Object.values(customObj).forEach((name) => {
       const normKey = normalizeCategoryKey(name);
       if (normKey && !seenNormKeys.has(normKey)) {
@@ -131,9 +130,9 @@ export function useCategories() {
 
   onUnmounted(() => {
     listenerConsumers -= 1;
-    if (listenerConsumers === 0) {
-      unsubscribe?.();
-      unsubscribe = null;
+    if (listenerConsumers === 0 && realtimeChannel) {
+      supabase.removeChannel(realtimeChannel);
+      realtimeChannel = null;
     }
   });
 

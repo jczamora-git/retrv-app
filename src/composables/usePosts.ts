@@ -1,16 +1,5 @@
 import { ref } from "vue";
-import {
-  ref as dbRef,
-  onValue,
-  get,
-  set,
-  push,
-  update,
-  remove,
-  query,
-  limitToLast
-} from "firebase/database";
-import { db } from "../firebase";
+import { supabase } from "../utils/supabase";
 import { useAuth } from "./useAuth";
 import { useImageUpload } from "./useImageUpload";
 import type {
@@ -32,6 +21,40 @@ const postsError = ref("");
 const myHelpfulMap = ref<Record<string, boolean>>({});
 
 let inFlightPostsPromise: Promise<Post[]> | null = null;
+let realtimeChannelSubscribed = false;
+
+const mapPostRow = (row: any): Post => {
+  return {
+    id: row.id,
+    authorId: row.author_id || row.authorId || "anonymous",
+    authorName: row.author_name || row.authorName || "Community Member",
+    authorUsername: row.author_username || row.authorUsername || "member",
+    authorAvatar: row.author_avatar || row.authorAvatar || undefined,
+    type: (row.type?.toLowerCase() === "found" ? "found" : "lost") as PostType,
+    title: row.title || row.itemName || "Untitled Item",
+    category: (row.category || "Other") as PostCategory,
+    subCategory: row.subcategory || row.subCategory || undefined,
+    description: row.description || "",
+    location: row.location || "Unknown location",
+    eventDate: row.event_date || row.eventDate || row.date || (row.created_at ? new Date(row.created_at).toISOString().split("T")[0] : new Date().toISOString().split("T")[0]),
+    imageUrl: row.image_url || row.imageUrl || (Array.isArray(row.photos) && row.photos[0]) || undefined,
+    imageKey: row.image_key || row.imageKey || undefined,
+    imagePath: row.image_path || row.imagePath || undefined,
+    photos: Array.isArray(row.photos) ? row.photos : (row.image_url ? [row.image_url] : []),
+    status: (row.status?.toLowerCase() === "resolved"
+      ? "resolved"
+      : row.status?.toLowerCase() === "returned" || row.status?.toLowerCase() === "claimed"
+      ? "returned"
+      : "open") as PostStatus,
+    helpfulCount: typeof row.helpful_count === "number" ? row.helpful_count : (typeof row.helpfulCount === "number" ? row.helpfulCount : 0),
+    commentsCount: typeof row.comments_count === "number" ? row.comments_count : (typeof row.commentsCount === "number" ? row.commentsCount : 0),
+    resolvedAt: row.resolved_at ? (typeof row.resolved_at === "number" ? row.resolved_at : new Date(row.resolved_at).getTime()) : undefined,
+    resolvedBy: row.resolved_by || row.resolvedBy || undefined,
+    meritRecipientId: row.merit_recipient_id || row.meritRecipientId || null,
+    createdAt: row.created_at ? (typeof row.created_at === "number" ? row.created_at : new Date(row.created_at).getTime()) : Date.now(),
+    updatedAt: row.updated_at ? (typeof row.updated_at === "number" ? row.updated_at : new Date(row.updated_at).getTime()) : Date.now()
+  };
+};
 
 const resolvePendingSubcategory = async (
   data: Partial<PostFormData>,
@@ -46,49 +69,12 @@ const resolvePendingSubcategory = async (
   return resolveCustomSubcategory(category, subCategory);
 };
 
-/** Save the post and its new shared option in one all-or-nothing Firebase update. */
-const savePostWithSubcategory = async (
-  postWrites: (name: string) => Record<string, unknown>,
-  subcategory: ResolvedCustomSubcategory
-) => {
-  const path = `subcategories/${subcategory.categoryKey}/${subcategory.normalizedKey}`;
-  try {
-    await update(dbRef(db), {
-      ...postWrites(subcategory.name),
-      [path]: {
-        name: subcategory.name,
-        normalizedKey: subcategory.normalizedKey,
-        createdAt: Date.now()
-      }
-    });
-  } catch (error) {
-    // Another publisher may have claimed this exact key with a different display name.
-    // The immutable-name rule rejects that combined write, so reuse the confirmed record.
-    let existingName: string | undefined;
-    try {
-      const snapshot = await get(dbRef(db, path));
-      const existing = snapshot.val();
-      if (snapshot.exists() && typeof existing?.name === "string" &&
-        normalizeCategoryKey(existing.name) === subcategory.normalizedKey) {
-        existingName = existing.name.trim();
-      }
-    } catch {
-      throw error;
-    }
-    if (!existingName || existingName === subcategory.name) throw error;
-    await update(dbRef(db), postWrites(existingName));
-  }
-};
-
 export function usePosts() {
   const { currentProfile, currentUser } = useAuth();
   const { uploadPostImage, deleteUploadedFile } = useImageUpload();
 
-  /**
-   * Fetch newest posts with limit constraint, request deduplication, and refresh retention.
-   */
   const fetchPosts = async (options: { limit?: number; isRefresh?: boolean } = {}): Promise<Post[]> => {
-    const limitCount = options.limit || 25;
+    const limitCount = options.limit || 50;
     const isRefresh = Boolean(options.isRefresh);
 
     if (inFlightPostsPromise) {
@@ -105,46 +91,15 @@ export function usePosts() {
 
     inFlightPostsPromise = (async () => {
       try {
-        const postsQuery = query(dbRef(db, "posts"), limitToLast(limitCount));
-        const snapshot = await get(postsQuery);
-        const loaded: Post[] = [];
+        const { data, error } = await supabase
+          .from("posts")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .limit(limitCount);
 
-        if (snapshot.exists()) {
-          const val = snapshot.val();
-          Object.entries(val).forEach(([id, item]: [string, any]) => {
-            loaded.push({
-              id,
-              authorId: item.authorId || "anonymous",
-              authorName: item.authorName || "Community Member",
-              authorUsername: item.authorUsername || "member",
-              type: (item.type?.toLowerCase() === "found" ? "found" : "lost") as PostType,
-              title: item.title || item.itemName || "Untitled Item",
-              category: (item.category || "Other") as PostCategory,
-              subCategory: item.subCategory || undefined,
-              description: item.description || "",
-              location: item.location || "Unknown location",
-              eventDate: item.eventDate || item.date || new Date().toISOString().split("T")[0],
-              imageUrl: item.imageUrl || undefined,
-              imageKey: item.imageKey || undefined,
-              imagePath: item.imagePath || undefined,
-              status: (item.status?.toLowerCase() === "resolved"
-                ? "resolved"
-                : item.status?.toLowerCase() === "returned" || item.status?.toLowerCase() === "claimed"
-                ? "returned"
-                : "open") as PostStatus,
-              helpfulCount: typeof item.helpfulCount === "number" ? item.helpfulCount : 0,
-              commentsCount: typeof item.commentsCount === "number" ? item.commentsCount : 0,
-              resolvedAt: typeof item.resolvedAt === "number" ? item.resolvedAt : undefined,
-              resolvedBy: item.resolvedBy || undefined,
-              meritRecipientId: item.meritRecipientId || null,
-              createdAt: typeof item.createdAt === "number" ? item.createdAt : Date.now(),
-              updatedAt: typeof item.updatedAt === "number" ? item.updatedAt : Date.now()
-            });
-          });
-        }
+        if (error) throw error;
 
-        // Sort chronological newest first (createdAt descending)
-        loaded.sort((a, b) => b.createdAt - a.createdAt);
+        const loaded: Post[] = (data || []).map(mapPostRow);
         posts.value = loaded;
         postsError.value = "";
 
@@ -167,7 +122,6 @@ export function usePosts() {
       }
     })();
 
-    // Also load helpful map for current user in background
     if (currentUser.value?.uid) {
       loadMyHelpful(currentUser.value.uid);
     }
@@ -177,16 +131,34 @@ export function usePosts() {
 
   const subscribeToPosts = (options?: { limit?: number }) => {
     fetchPosts(options);
+
+    if (!realtimeChannelSubscribed) {
+      realtimeChannelSubscribed = true;
+      try {
+        supabase
+          .channel("public:posts")
+          .on("postgres_changes", { event: "*", schema: "public", table: "posts" }, () => {
+            fetchPosts({ isRefresh: true });
+          })
+          .subscribe();
+      } catch (err) {
+        console.warn("[usePosts] Realtime channel setup note:", err);
+      }
+    }
   };
 
-  const loadMyHelpful = async (uid: string) => {
+  const loadMyHelpful = (uid: string) => {
     try {
-      const snap = await get(dbRef(db, `userHelpful/${uid}`));
-      if (snap.exists()) {
-        myHelpfulMap.value = snap.val() || {};
-      } else {
-        myHelpfulMap.value = {};
+      const raw = localStorage.getItem(`user_helpful_${uid}`);
+      if (raw) {
+        myHelpfulMap.value = JSON.parse(raw);
       }
+    } catch {}
+  };
+
+  const saveMyHelpful = (uid: string) => {
+    try {
+      localStorage.setItem(`user_helpful_${uid}`, JSON.stringify(myHelpfulMap.value));
     } catch {}
   };
 
@@ -207,40 +179,53 @@ export function usePosts() {
       finalImageKey = data.imageKey || null;
     }
 
-    const postsNode = dbRef(db, "posts");
-    const newPostRef = push(postsNode);
-    const postId = newPostRef.key!;
-    const now = Date.now();
+    const postId = `post_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    const now = new Date().toISOString();
 
-    const newPost: Omit<Post, "id"> = {
-      authorId: currentProfile.value.id,
-      authorName: currentProfile.value.name,
-      authorUsername: currentProfile.value.username,
+    let subCat = data.subCategory?.trim() || null;
+    const pending = await resolvePendingSubcategory(data, data.category, data.subCategory);
+    if (pending) {
+      subCat = pending.name;
+      if (pending.isNew) {
+        try {
+          await supabase.from("subcategories").upsert({
+            id: `${pending.categoryKey}_${pending.normalizedKey}`,
+            category_key: pending.categoryKey,
+            normalized_key: pending.normalizedKey,
+            name: pending.name
+          });
+        } catch (e) {
+          console.warn("Subcategory save note:", e);
+        }
+      }
+    }
+
+    const newPostRecord = {
+      id: postId,
+      author_id: currentProfile.value.id,
+      author_name: currentProfile.value.name,
+      author_username: currentProfile.value.username,
+      author_avatar: currentProfile.value.avatarUrl || null,
       type: data.type,
       title: data.title.trim(),
       category: data.category,
-      ...(data.subCategory?.trim() ? { subCategory: data.subCategory.trim() } : {}),
+      subcategory: subCat,
       description: data.description.trim(),
       location: data.location.trim(),
-      eventDate: data.eventDate,
-      ...(finalImageUrl ? { imageUrl: finalImageUrl, imageKey: finalImageKey } : {}),
+      photos: finalImageUrl ? [finalImageUrl] : [],
       status: "open",
-      helpfulCount: 0,
-      commentsCount: 0,
-      createdAt: now,
-      updatedAt: now
+      created_at: now,
+      updated_at: now
     };
 
-    const pending = await resolvePendingSubcategory(data, data.category, data.subCategory);
-    if (pending) newPost.subCategory = pending.name;
-    if (pending?.isNew) {
-      await savePostWithSubcategory(
-        (name) => ({ [`posts/${postId}`]: { ...newPost, subCategory: name } }),
-        pending
-      );
-    } else {
-      await set(newPostRef, newPost);
+    const { error } = await supabase.from("posts").insert(newPostRecord);
+    if (error) {
+      console.error("[usePosts] Create post error:", error);
+      throw error;
     }
+
+    // Refresh local state
+    await fetchPosts({ isRefresh: true });
     return postId;
   };
 
@@ -256,24 +241,19 @@ export function usePosts() {
     }
 
     const updates: Record<string, any> = {
-      updatedAt: Date.now()
+      updated_at: new Date().toISOString()
     };
 
     if (data.title !== undefined) updates.title = data.title.trim();
     if (data.category !== undefined) updates.category = data.category;
-    if (data.subCategory !== undefined) updates.subCategory = data.subCategory?.trim() || null;
+    if (data.subCategory !== undefined) updates.subcategory = data.subCategory?.trim() || null;
     if (data.description !== undefined) updates.description = data.description.trim();
     if (data.location !== undefined) updates.location = data.location.trim();
-    if (data.eventDate !== undefined) updates.eventDate = data.eventDate;
 
     if (data.removeImage) {
-      updates.imageUrl = null;
-      updates.imageKey = null;
-      updates.imagePath = null;
+      updates.photos = [];
     } else if (data.imageUrl !== undefined && !data.imageUrl?.startsWith("blob:")) {
-      updates.imageUrl = data.imageUrl?.trim() || null;
-      updates.imageKey = data.imageKey || null;
-      updates.imagePath = null;
+      updates.photos = data.imageUrl?.trim() ? [data.imageUrl.trim()] : [];
     }
 
     const pending = await resolvePendingSubcategory(
@@ -281,19 +261,24 @@ export function usePosts() {
       data.category ?? post.category,
       data.subCategory === undefined ? post.subCategory : data.subCategory
     );
-    if (pending) updates.subCategory = pending.name;
-    if (pending?.isNew) {
-      await savePostWithSubcategory(
-        (name) => Object.fromEntries(
-          Object.entries({ ...updates, subCategory: name }).map(([key, value]) => [
-            `posts/${postId}/${key}`, value
-          ])
-        ),
-        pending
-      );
-    } else {
-      await update(dbRef(db, `posts/${postId}`), updates);
+    if (pending) {
+      updates.subcategory = pending.name;
+      if (pending.isNew) {
+        try {
+          await supabase.from("subcategories").upsert({
+            id: `${pending.categoryKey}_${pending.normalizedKey}`,
+            category_key: pending.categoryKey,
+            normalized_key: pending.normalizedKey,
+            name: pending.name
+          });
+        } catch {}
+      }
     }
+
+    const { error } = await supabase.from("posts").update(updates).eq("id", postId);
+    if (error) throw error;
+
+    await fetchPosts({ isRefresh: true });
   };
 
   const resolvePost = async (postId: string, status: PostStatus = "resolved") => {
@@ -306,10 +291,17 @@ export function usePosts() {
       throw new Error("You can only resolve your own posts.");
     }
 
-    await update(dbRef(db, `posts/${postId}`), {
-      status,
-      updatedAt: Date.now()
-    });
+    const { error } = await supabase
+      .from("posts")
+      .update({
+        status,
+        resolved_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", postId);
+
+    if (error) throw error;
+    await fetchPosts({ isRefresh: true });
   };
 
   const deletePost = async (postId: string) => {
@@ -322,20 +314,18 @@ export function usePosts() {
       throw new Error("You can only delete your own posts.");
     }
 
-    // Delete image from UploadThing if imageKey exists
     if (post.imageKey) {
       deleteUploadedFile(post.imageKey).catch(() => {});
     }
 
-    // Remove from posts node
-    await remove(dbRef(db, `posts/${postId}`));
-    // Also cleanup comments and helpful nodes
+    const { error } = await supabase.from("posts").delete().eq("id", postId);
+    if (error) throw error;
+
     try {
-      await remove(dbRef(db, `comments/${postId}`));
-      await remove(dbRef(db, `helpful/${postId}`));
-    } catch (e) {
-      console.warn("Error cleaning up post associations:", e);
-    }
+      await supabase.from("comments").delete().eq("post_id", postId);
+    } catch {}
+
+    posts.value = posts.value.filter((p) => p.id !== postId);
   };
 
   const toggleHelpful = async (postId: string) => {
@@ -345,37 +335,20 @@ export function usePosts() {
     if (!post) return;
 
     const isMarked = !!myHelpfulMap.value[postId];
-    const postRef = dbRef(db, `posts/${postId}`);
-    const postHelpfulRef = dbRef(db, `helpful/${postId}/${uid}`);
-    const userHelpfulRef = dbRef(db, `userHelpful/${uid}/${postId}`);
-
     const currentCount = post.helpfulCount || 0;
     const newCount = isMarked ? Math.max(0, currentCount - 1) : currentCount + 1;
 
-    // Optimistic local update
     myHelpfulMap.value = {
       ...myHelpfulMap.value,
       [postId]: !isMarked
     };
     post.helpfulCount = newCount;
+    saveMyHelpful(uid);
 
     try {
-      if (isMarked) {
-        await remove(postHelpfulRef);
-        await remove(userHelpfulRef);
-      } else {
-        await set(postHelpfulRef, true);
-        await set(userHelpfulRef, true);
-      }
-      await update(postRef, { helpfulCount: newCount });
+      await supabase.from("posts").update({ helpful_count: newCount }).eq("id", postId);
     } catch (err) {
       console.error("Error toggling helpful:", err);
-      // Revert optimistic update
-      myHelpfulMap.value = {
-        ...myHelpfulMap.value,
-        [postId]: isMarked
-      };
-      post.helpfulCount = currentCount;
     }
   };
 
@@ -388,63 +361,14 @@ export function usePosts() {
     if (existing) return existing;
 
     try {
-      const snap = await get(dbRef(db, `posts/${postId}`));
-      if (snap.exists()) {
-        const item = snap.val();
-        return {
-          id: postId,
-          authorId: item.authorId || "anonymous",
-          authorName: item.authorName || "Community Member",
-          authorUsername: item.authorUsername || "member",
-          type: (item.type?.toLowerCase() === "found" ? "found" : "lost") as PostType,
-          title: item.title || item.itemName || "Untitled Item",
-          category: (item.category || "Other") as PostCategory,
-          subCategory: item.subCategory || undefined,
-          description: item.description || "",
-          location: item.location || "Unknown location",
-          eventDate: item.eventDate || item.date || new Date().toISOString().split("T")[0],
-          imageUrl: item.imageUrl || undefined,
-          imageKey: item.imageKey || undefined,
-          imagePath: item.imagePath || undefined,
-          status: (item.status?.toLowerCase() === "resolved"
-            ? "resolved"
-            : item.status?.toLowerCase() === "returned"
-            ? "returned"
-            : "open") as PostStatus,
-          helpfulCount: typeof item.helpfulCount === "number" ? item.helpfulCount : 0,
-          commentsCount: typeof item.commentsCount === "number" ? item.commentsCount : 0,
-          resolvedAt: typeof item.resolvedAt === "number" ? item.resolvedAt : undefined,
-          resolvedBy: item.resolvedBy || undefined,
-          meritRecipientId: item.meritRecipientId || null,
-          createdAt: typeof item.createdAt === "number" ? item.createdAt : Date.now(),
-          updatedAt: typeof item.updatedAt === "number" ? item.updatedAt : Date.now()
-        };
-      }
-      // Check legacy table
-      const legacySnap = await get(dbRef(db, `lost_found/${postId}`));
-      if (legacySnap.exists()) {
-        const item = legacySnap.val();
-        return {
-          id: postId,
-          authorId: item.authorId || "legacy_user",
-          authorName: item.authorName || "Legacy Post",
-          authorUsername: item.authorUsername || "community",
-          type: (item.type?.toLowerCase() === "found" ? "found" : "lost") as PostType,
-          title: item.itemName || "Untitled Item",
-          category: item.category || "Other",
-          subCategory: item.subCategory || undefined,
-          description: item.description || "",
-          location: item.location || "Unknown location",
-          eventDate: item.date || new Date().toISOString().split("T")[0],
-          imageUrl: undefined,
-          imageKey: undefined,
-          status: (item.status === "Claimed" ? "resolved" : "open") as PostStatus,
-          helpfulCount: 0,
-          commentsCount: 0,
-          createdAt: Date.now() - 86400000,
-          updatedAt: Date.now() - 86400000
-        };
-      }
+      const { data, error } = await supabase
+        .from("posts")
+        .select("*")
+        .eq("id", postId)
+        .maybeSingle();
+
+      if (error && error.code !== "PGRST116") throw error;
+      if (data) return mapPostRow(data);
       return null;
     } catch (e) {
       console.error("Failed to get post by id:", e);
@@ -462,14 +386,12 @@ export function usePosts() {
     const categoryKeys = new Set(advanced?.categories?.map(categoryKey));
     const subcategoryKeys = new Set(advanced?.subcategories?.map(normalizeCategoryKey));
     return posts.value.filter((post) => {
-      // Filter tab
       const matchesFilter =
         filter === "All" ||
         (filter === "Lost" && post.type === "lost") ||
         (filter === "Found" && post.type === "found") ||
         (filter === "Resolved" && (post.status === "resolved" || post.status === "returned"));
 
-      // Search term
       const matchesSearch =
         !q ||
         [
@@ -482,10 +404,7 @@ export function usePosts() {
           post.authorUsername
         ].some((text) => (text || "").toLowerCase().includes(q));
 
-      // Advanced Category Filters (Within group: OR)
       const matchesCategories = categoryKeys.size === 0 || categoryKeys.has(categoryKey(post.category));
-
-      // Advanced Subcategory Filters (Within group: OR)
       const matchesSubcategories = subcategoryKeys.size === 0 ||
         Boolean(post.subCategory && subcategoryKeys.has(normalizeCategoryKey(post.subCategory)));
 

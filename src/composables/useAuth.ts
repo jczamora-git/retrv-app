@@ -1,23 +1,19 @@
 import { ref, computed } from "vue";
-import {
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  linkWithCredential,
-  EmailAuthProvider,
-  signOut,
-  onAuthStateChanged,
-  type User
-} from "firebase/auth";
-import {
-  ref as dbRef,
-  get,
-  set,
-  remove
-} from "firebase/database";
-import { auth, db } from "../firebase";
+import type { User as SupabaseUser } from "@supabase/supabase-js";
+import { supabase } from "../utils/supabase";
 import { disconnectSocket, getApiServerUrl } from "../services/socket";
 import { useProfiles } from "./useProfiles";
 import type { Profile, ProfileFormData } from "../types/profile";
+
+export interface User {
+  uid: string;
+  id?: string;
+  email?: string | null;
+  displayName?: string | null;
+  phoneNumber?: string | null;
+  isAnonymous?: boolean;
+  isDevAccount?: boolean;
+}
 
 export interface DevSession {
   uid: string;
@@ -35,10 +31,6 @@ const DEV_AUTH_STORAGE_KEY = "dev_auth_session";
 export const isDevBypassAuth =
   import.meta.env.VITE_DEV_BYPASS_AUTH === "true";
 
-/**
- * Checks whether development authentication bypass is enabled.
- * Driven by VITE_DEV_BYPASS_AUTH === 'true'.
- */
 export const isDevBypassEnabled = (): boolean => {
   return isDevBypassAuth;
 };
@@ -75,24 +67,13 @@ export const clearDevSession = (): void => {
 export const createDevUser = (session: DevSession): User => {
   return {
     uid: session.uid,
+    id: session.uid,
     email: session.email,
     isAnonymous: false,
     displayName: session.name,
-    emailVerified: false,
-    metadata: {},
-    providerData: [],
-    refreshToken: "",
-    tenantId: null,
-    delete: async () => {},
-    getIdToken: async () => "",
-    getIdTokenResult: async () => ({} as any),
-    reload: async () => {},
-    toJSON: () => session,
     phoneNumber: session.phone,
-    photoURL: null,
-    providerId: "password",
     isDevAccount: true
-  } as unknown as User;
+  };
 };
 
 const currentUser = ref<User | null>(null);
@@ -102,60 +83,50 @@ const authLoading = ref(true);
 
 let authInitPromise: Promise<User | null> | null = null;
 
-/**
- * Normalize username: trim, lowercase, remove leading @, strip invalid characters
- */
 export const normalizeUsername = (username: string): string => {
   return username.trim().toLowerCase().replace(/^@+/, "").replace(/[^a-z0-9_.]/g, "");
 };
 
-/**
- * Human-readable mapping for Firebase Authentication errors.
- * Prevents exposing raw error codes/internals to the user.
- */
 export function formatAuthError(err: any): string {
   if (!err) return "An unexpected error occurred. Please try again.";
-  const code = err.code || "";
-  const msg = err.message || "";
+  const msg = (err.message || err.error_description || "").toLowerCase();
 
-  switch (code) {
-    case "auth/email-already-in-use":
-    case "auth/credential-already-in-use":
-      return "This email address is already registered. Please sign in instead.";
-    case "auth/invalid-email":
-      return "Please enter a valid email address.";
-    case "auth/weak-password":
-      return "Password is too weak. Please use at least 6 characters.";
-    case "auth/user-not-found":
-    case "auth/wrong-password":
-    case "auth/invalid-credential":
-      return "Incorrect email/username or password.";
-    case "auth/too-many-requests":
-      return "Too many attempts. Try again later.";
-    case "auth/user-disabled":
-      return "This account is disabled.";
-    case "auth/operation-not-allowed":
-      return "Email/Password sign-in is not enabled in Firebase Console.";
-    case "auth/configuration-not-found":
-      return "Email/Password sign-in provider is not configured in Firebase Console. Please enable it under Authentication > Sign-in method.";
-    case "auth/network-request-failed":
-      return "Unable to connect. Check your connection.";
-    case "auth/requires-recent-login":
-      return "This operation is sensitive. Please sign in again before proceeding.";
-    default:
-      if (msg.includes("email-already-in-use")) {
-        return "This email address is already registered. Please sign in instead.";
-      }
-      return msg || "Authentication failed. Please try again.";
+  if (msg.includes("already registered") || msg.includes("user already exists") || msg.includes("email-already-in-use")) {
+    return "This email address is already registered. Please sign in instead.";
   }
+  if (msg.includes("invalid login credentials") || msg.includes("invalid_credentials") || msg.includes("wrong password")) {
+    return "Incorrect email/username or password.";
+  }
+  if (msg.includes("invalid email")) {
+    return "Please enter a valid email address.";
+  }
+  if (msg.includes("password should be at least") || msg.includes("weak password")) {
+    return "Password is too weak. Please use at least 6 characters.";
+  }
+  if (msg.includes("too many requests") || msg.includes("rate limit")) {
+    return "Too many attempts. Try again later.";
+  }
+  if (msg.includes("network") || msg.includes("fetch")) {
+    return "Unable to connect. Check your connection.";
+  }
+
+  return err.message || "Authentication failed. Please try again.";
 }
 
-/**
- * Single, unified authentication session initializer.
- * Checks for existing Firebase Auth session.
- */
+export function mapSupabaseUser(sbUser: SupabaseUser | null): User | null {
+  if (!sbUser) return null;
+  return {
+    uid: sbUser.id,
+    id: sbUser.id,
+    email: sbUser.email,
+    displayName: sbUser.user_metadata?.name || sbUser.user_metadata?.full_name || null,
+    phoneNumber: sbUser.phone || sbUser.user_metadata?.phone || null,
+    isAnonymous: sbUser.is_anonymous || false,
+    isDevAccount: false
+  };
+}
+
 export function initializeAuthSession(): Promise<User | null> {
-  // If in bypass mode and we already have a dev session in localStorage, immediately populate state
   if (isDevBypassAuth) {
     const devSession = getDevSession();
     if (devSession) {
@@ -186,18 +157,22 @@ export function initializeAuthSession(): Promise<User | null> {
   authInitPromise = new Promise<User | null>((resolve) => {
     let initialResolved = false;
 
-    onAuthStateChanged(auth, async (user) => {
+    // Listen to Supabase Auth State Changes
+    supabase.auth.onAuthStateChange(async (event, session) => {
       authLoading.value = true;
       try {
-        if (user) {
-          // Real Firebase Auth session exists -> clear any local dev bypass session
+        if (session?.user) {
           clearDevSession();
+          const user = mapSupabaseUser(session.user);
           currentUser.value = user;
-          try {
-            const profile = await fetchProfile(user.uid);
-            currentProfile.value = profile;
-          } catch (err) {
-            console.warn("[Auth] Error fetching profile for user:", err);
+
+          if (user?.uid) {
+            try {
+              const profile = await fetchProfile(user.uid);
+              currentProfile.value = profile;
+            } catch (err) {
+              console.warn("[Auth] Error fetching profile for user:", err);
+            }
           }
           isAuthReady.value = true;
 
@@ -206,12 +181,9 @@ export function initializeAuthSession(): Promise<User | null> {
             resolve(user);
           }
         } else {
-          // No authenticated Firebase user session.
-          // Check if dev test bypass is explicitly enabled
           if (isDevBypassAuth) {
             const devSession = getDevSession();
             if (devSession) {
-              console.warn("[DEV] Firebase Auth bypass enabled. This is a development mock session.");
               const devUser = createDevUser(devSession);
               currentUser.value = devUser;
               currentProfile.value = {
@@ -255,17 +227,33 @@ export function initializeAuthSession(): Promise<User | null> {
         authLoading.value = false;
       }
     });
+
+    // Also trigger initial session check
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!initialResolved && !session) {
+        if (!isDevBypassAuth || !getDevSession()) {
+          currentUser.value = null;
+          currentProfile.value = null;
+          isAuthReady.value = true;
+          authLoading.value = false;
+          initialResolved = true;
+          resolve(null);
+        }
+      }
+    }).catch(() => {
+      if (!initialResolved) {
+        initialResolved = true;
+        resolve(currentUser.value);
+      }
+    });
   });
 
   return authInitPromise;
 }
 
-/**
- * Returns the currently authenticated Firebase user, waiting for initialization if in flight.
- */
 export async function getAuthenticatedUser(): Promise<User | null> {
-  if (auth.currentUser) {
-    return auth.currentUser;
+  if (currentUser.value) {
+    return currentUser.value;
   }
   return await initializeAuthSession();
 }
@@ -273,25 +261,33 @@ export async function getAuthenticatedUser(): Promise<User | null> {
 export const fetchProfile = async (uid: string): Promise<Profile | null> => {
   if (!uid) return null;
   try {
-    const snap = await get(dbRef(db, `profiles/${uid}`));
-    if (snap.exists()) {
-      const val = snap.val();
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", uid)
+      .maybeSingle();
+
+    if (error && error.code !== "PGRST116") {
+      throw error;
+    }
+
+    if (data) {
       return {
-        id: uid,
-        name: val.name || "",
-        username: val.username || "",
-        phone: val.phone || "",
-        email: val.email || auth.currentUser?.email || undefined,
-        avatarUrl: val.avatarUrl || null,
-        avatarKey: val.avatarKey || null,
-        avatarPath: val.avatarPath || null,
-        createdAt: val.createdAt || Date.now(),
-        updatedAt: val.updatedAt || Date.now()
+        id: data.id || uid,
+        name: data.name || "",
+        username: data.username || "",
+        phone: data.phone || "",
+        email: data.email || currentUser.value?.email || undefined,
+        avatarUrl: data.avatar_url || data.avatarUrl || null,
+        avatarKey: data.avatar_key || data.avatarKey || null,
+        avatarPath: null,
+        createdAt: data.created_at ? new Date(data.created_at).getTime() : Date.now(),
+        updatedAt: data.updated_at ? new Date(data.updated_at).getTime() : Date.now()
       };
     }
     return null;
   } catch (err) {
-    console.error("Failed to fetch profile:", err);
+    console.error("Failed to fetch profile from Supabase:", err);
     return null;
   }
 };
@@ -303,25 +299,31 @@ export const checkUsernameAvailable = async (
   const clean = normalizeUsername(rawUsername);
   if (!clean) return false;
   try {
-    const snap = await get(dbRef(db, `usernames/${clean}`));
-    if (!snap.exists()) return true;
-    return snap.val() === (currentUid || auth.currentUser?.uid || currentUser.value?.uid);
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("username", clean)
+      .maybeSingle();
+
+    if (error && error.code !== "PGRST116") {
+      console.warn("Could not check username availability:", error);
+      return true;
+    }
+
+    if (!data) return true;
+    return data.id === (currentUid || currentUser.value?.uid);
   } catch (err) {
     console.warn("Could not check username availability:", err);
     return true;
   }
 };
 
-/**
- * Resolve username to account email for authentication.
- */
 export async function resolveUsername(rawUsername: string): Promise<string> {
   const clean = normalizeUsername(rawUsername);
   if (!clean) {
     throw new Error("Please enter a valid username.");
   }
 
-  // When bypass is enabled, do not make network calls to /api/auth/resolve-username
   if (isDevBypassAuth) {
     return `${clean}@example.com`;
   }
@@ -329,7 +331,6 @@ export async function resolveUsername(rawUsername: string): Promise<string> {
   const serverUrl = getApiServerUrl();
   let resolvedEmail: string | null = null;
 
-  // 1. Preferred: Query Node/Express backend resolution endpoint with timeout
   if (serverUrl) {
     try {
       const controller = new AbortController();
@@ -353,32 +354,25 @@ export async function resolveUsername(rawUsername: string): Promise<string> {
       if (err.message === "Account not found.") {
         throw err;
       }
-      // If network timed out or failed to server, proceed immediately to client RTDB fallback
     }
   }
 
-  // 2. Direct RTDB fallback: look up usernames/{clean} -> profiles/{uid}/email
   if (!resolvedEmail) {
     try {
-      const snap = await get(dbRef(db, `usernames/${clean}`));
-      if (snap.exists()) {
-        const uid = snap.val();
-        if (uid) {
-          const profileSnap = await get(dbRef(db, `profiles/${uid}`));
-          if (profileSnap.exists()) {
-            const profile = profileSnap.val();
-            if (profile && profile.email) {
-              resolvedEmail = profile.email.trim().toLowerCase();
-            }
-          }
-        }
+      const { data } = await supabase
+        .from("profiles")
+        .select("email")
+        .eq("username", clean)
+        .maybeSingle();
+
+      if (data && data.email) {
+        resolvedEmail = data.email.trim().toLowerCase();
       }
     } catch (dbErr) {
-      console.warn("[Auth] Username lookup fallback warning:", dbErr);
+      console.warn("[Auth] Supabase username lookup warning:", dbErr);
     }
   }
 
-  // 3. Check for dev-bypass account
   const devSession = getDevSession();
   if (devSession && normalizeUsername(devSession.username) === clean) {
     throw new Error("This account was created in development mode. Please create a real account.");
@@ -428,7 +422,8 @@ export const currentAppUserId = computed<string | null>(() => {
 });
 
 export const sessionUid = computed<string | null>(() => currentAppUserId.value);
-export const isRealFirebaseUser = computed<boolean>(() => !!auth.currentUser && !auth.currentUser.isAnonymous);
+export const isRealSupabaseUser = computed<boolean>(() => !!currentUser.value && !currentUser.value.isAnonymous && !currentUser.value.isDevAccount);
+export const isRealFirebaseUser = isRealSupabaseUser;
 export const isDevBypassUser = computed<boolean>(() => isDevBypassEnabled() && !!(currentUser.value as any)?.isDevAccount);
 export const hasValidSession = computed<boolean>(() => !!sessionUser.value && (!sessionUser.value.isAnonymous || sessionUser.value.isDevAccount));
 
@@ -438,17 +433,10 @@ export async function getSessionUser(): Promise<SessionUser | null> {
 }
 
 export function useAuth() {
-  /**
-   * Sign in with either Email or Username + Password.
-   */
   const signIn = async (identifier: string, password: string): Promise<User> => {
     const trimmed = identifier.trim();
-    if (!trimmed) {
-      throw new Error("Email or username is required.");
-    }
-    if (!password) {
-      throw new Error("Password is required.");
-    }
+    if (!trimmed) throw new Error("Email or username is required.");
+    if (!password) throw new Error("Password is required.");
 
     let targetEmail = "";
     const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed);
@@ -457,17 +445,13 @@ export function useAuth() {
       const cleanUsername = normalizeUsername(trimmed);
       let targetUid: string | null = null;
 
-      // 1. Try to find user UID by username from RTDB
       try {
         if (cleanUsername) {
-          const snap = await get(dbRef(db, `usernames/${cleanUsername}`));
-          if (snap.exists()) {
-            targetUid = snap.val();
-          }
+          const { data } = await supabase.from("profiles").select("id").eq("username", cleanUsername).maybeSingle();
+          if (data?.id) targetUid = data.id;
         }
       } catch {}
 
-      // 2. Try to match existing dev session from localStorage
       if (!targetUid) {
         const existingDev = getDevSession();
         if (
@@ -479,12 +463,10 @@ export function useAuth() {
         }
       }
 
-      // 3. Fallback: create stable deterministic UID from username
       if (!targetUid) {
         targetUid = `dev_${cleanUsername || Math.random().toString(36).substring(2, 9)}`;
       }
 
-      // Fetch or create profile
       let profile = await fetchProfile(targetUid);
       if (!profile) {
         const defaultName = isEmail ? trimmed.split("@")[0] : trimmed;
@@ -499,8 +481,13 @@ export function useAuth() {
           updatedAt: Date.now()
         };
         try {
-          await set(dbRef(db, `profiles/${targetUid}`), profile);
-          await set(dbRef(db, `usernames/${defaultUsername}`), targetUid);
+          await supabase.from("profiles").upsert({
+            id: targetUid,
+            name: profile.name,
+            username: profile.username,
+            phone: profile.phone,
+            email: profile.email
+          });
         } catch {}
       }
 
@@ -526,27 +513,30 @@ export function useAuth() {
     if (isEmail) {
       targetEmail = trimmed.toLowerCase();
     } else {
-      // Username lookup -> resolves to account email
       targetEmail = await resolveUsername(trimmed);
     }
 
     try {
-      const userCred = await signInWithEmailAndPassword(auth, targetEmail, password);
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: targetEmail,
+        password
+      });
+
+      if (error) throw error;
+      if (!data.user) throw new Error("Authentication failed.");
+
       clearDevSession();
-      currentUser.value = userCred.user;
-      const profile = await fetchProfile(userCred.user.uid);
+      const user = mapSupabaseUser(data.user)!;
+      currentUser.value = user;
+      const profile = await fetchProfile(user.uid);
       currentProfile.value = profile;
-      return userCred.user;
+      return user;
     } catch (err: any) {
       console.error("[Auth] Sign in failed:", err);
       throw new Error(formatAuthError(err));
     }
   };
 
-  /**
-   * Create account.
-   * When DEV bypass is enabled, creates local mock account with stable dev UID.
-   */
   const signUp = async (params: {
     name: string;
     username: string;
@@ -594,8 +584,7 @@ export function useAuth() {
       return devUser;
     }
 
-    // Check username availability first
-    const isAvail = await checkUsernameAvailable(cleanUsername, auth.currentUser?.uid);
+    const isAvail = await checkUsernameAvailable(cleanUsername, currentUser.value?.uid);
     if (!isAvail) {
       throw new Error("Username is already taken. Please choose another one.");
     }
@@ -603,18 +592,23 @@ export function useAuth() {
     let user: User;
 
     try {
-      if (auth.currentUser && auth.currentUser.isAnonymous) {
-        // Upgrade anonymous user preserving their existing UID
-        const credential = EmailAuthProvider.credential(cleanEmail, params.password);
-        const userCred = await linkWithCredential(auth.currentUser, credential);
-        user = userCred.user;
-        clearDevSession();
-      } else {
-        // Real Firebase Auth account creation
-        const userCred = await createUserWithEmailAndPassword(auth, cleanEmail, params.password);
-        user = userCred.user;
-        clearDevSession();
-      }
+      const { data, error } = await supabase.auth.signUp({
+        email: cleanEmail,
+        password: params.password,
+        options: {
+          data: {
+            name: cleanName,
+            username: cleanUsername,
+            phone: cleanPhone
+          }
+        }
+      });
+
+      if (error) throw error;
+      if (!data.user) throw new Error("Sign up failed.");
+
+      clearDevSession();
+      user = mapSupabaseUser(data.user)!;
     } catch (err: any) {
       console.error("[Auth] Sign up failed:", err);
       throw new Error(formatAuthError(err));
@@ -632,14 +626,11 @@ export function useAuth() {
     return user;
   };
 
-  /**
-   * Sign out current user, clear session, and disconnect socket.
-   */
   const signOutUser = async (): Promise<void> => {
     try {
-      await signOut(auth);
+      await supabase.auth.signOut();
     } catch (err) {
-      console.warn("[Auth] Firebase signOut warning:", err);
+      console.warn("[Auth] Supabase signOut warning:", err);
     } finally {
       clearDevSession();
       currentUser.value = null;
@@ -650,12 +641,12 @@ export function useAuth() {
   };
 
   const saveProfile = async (data: ProfileFormData): Promise<Profile> => {
-    let user = auth.currentUser || currentUser.value;
+    let user = currentUser.value;
     if (!user) {
       user = await initializeAuthSession();
     }
     if (!user?.uid) {
-      throw new Error("Unable to save profile: Firebase authentication session is missing.");
+      throw new Error("Unable to save profile: Authentication session is missing.");
     }
 
     const uid = user.uid;
@@ -665,15 +656,6 @@ export function useAuth() {
     const isAvail = await checkUsernameAvailable(cleanUsername, uid);
     if (!isAvail) {
       throw new Error("Username is already taken. Please pick another one.");
-    }
-
-    // Release previous username if changed
-    if (currentProfile.value?.username && currentProfile.value.username !== cleanUsername) {
-      try {
-        await remove(dbRef(db, `usernames/${normalizeUsername(currentProfile.value.username)}`));
-      } catch (e) {
-        console.warn("Could not remove old username claim:", e);
-      }
     }
 
     const newProfile: Profile = {
@@ -689,9 +671,20 @@ export function useAuth() {
       updatedAt: now
     };
 
-    // Save profile and claim username in Firebase RTDB
-    await set(dbRef(db, `profiles/${uid}`), newProfile);
-    await set(dbRef(db, `usernames/${cleanUsername}`), uid);
+    const { error } = await supabase.from("profiles").upsert({
+      id: uid,
+      name: newProfile.name,
+      username: newProfile.username,
+      phone: newProfile.phone,
+      email: newProfile.email,
+      avatar_url: newProfile.avatarUrl,
+      avatar_key: newProfile.avatarKey,
+      updated_at: new Date(now).toISOString()
+    });
+
+    if (error) {
+      console.warn("[Auth] Profile upsert warning:", error);
+    }
 
     currentProfile.value = newProfile;
     useProfiles().setCachedProfile(newProfile);
@@ -734,6 +727,7 @@ export function useAuth() {
     currentAppUserId,
     currentSessionUser: sessionUser,
     isSessionReady: isAuthReady,
+    isRealSupabaseUser,
     isRealFirebaseUser,
     isDevBypassUser,
     hasValidSession,

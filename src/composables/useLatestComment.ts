@@ -1,6 +1,5 @@
 import { ref, onMounted, watch } from "vue";
-import { ref as dbRef, get, query, limitToLast } from "firebase/database";
-import { db } from "../firebase";
+import { supabase } from "../utils/supabase";
 
 export interface LatestCommentPreview {
   id: string;
@@ -23,45 +22,29 @@ export async function fetchLatestCommentForPost(postId: string): Promise<LatestC
 
   const fetchPromise = (async () => {
     try {
-      const commentsQuery = query(dbRef(db, `comments/${postId}`), limitToLast(1));
-      const snap = await get(commentsQuery);
-      if (!snap.exists()) {
+      const { data, error } = await supabase
+        .from("comments")
+        .select("id, author_name, content, created_at")
+        .eq("post_id", postId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error && error.code !== "PGRST116") {
         latestCommentCache.set(postId, null);
         return null;
       }
 
-      const val = snap.val();
-      if (!val || typeof val !== "object") {
-        latestCommentCache.set(postId, null);
-        return null;
-      }
-
-      const entries = Object.entries(val);
-      if (entries.length === 0) {
-        latestCommentCache.set(postId, null);
-        return null;
-      }
-
-      const [id, c] = entries[entries.length - 1] as [string, any];
-      if (!c || typeof c !== "object") {
-        latestCommentCache.set(postId, null);
-        return null;
-      }
-
-      const content = typeof c.content === "string" ? c.content.trim() : "";
-      if (!content) {
+      if (!data || !data.content) {
         latestCommentCache.set(postId, null);
         return null;
       }
 
       const preview: LatestCommentPreview = {
-        id,
-        authorName:
-          typeof c.authorName === "string" && c.authorName.trim()
-            ? c.authorName.trim()
-            : "Community Member",
-        content,
-        createdAt: typeof c.createdAt === "number" ? c.createdAt : Date.now()
+        id: data.id,
+        authorName: data.author_name || "Community Member",
+        content: data.content,
+        createdAt: data.created_at ? new Date(data.created_at).getTime() : Date.now()
       };
       latestCommentCache.set(postId, preview);
       return preview;

@@ -1,10 +1,8 @@
 import { ref, computed } from 'vue';
-import { ref as dbRef, get } from 'firebase/database';
-import { db } from '../firebase';
+import { supabase } from '../utils/supabase';
 import { useChatSocket } from './useChatSocket';
 import { useConversations } from './useConversations';
 import { useAuth } from './useAuth';
-import { getChatServerUrl } from '../services/socket';
 import type { ChatMessage } from '../types/message';
 import type { ConversationThread } from '../types/conversation';
 
@@ -23,9 +21,7 @@ export function useChat(conversationId: string, initialThreadId = 'general') {
   const isMessagesLoading = ref(true);
   const isOtherTyping = ref(false);
 
-  let typingTimer: any = null;
-  let unregisterMessageListener: (() => void) | null = null;
-  let unregisterThreadListener: (() => void) | null = null;
+  let realtimeChannel: any = null;
   const messageMap = new Map<string, ChatMessage>();
 
   const activeThread = computed<ConversationThread | undefined>(() => {
@@ -48,45 +44,9 @@ export function useChat(conversationId: string, initialThreadId = 'general') {
   };
 
   const loadThreads = async (): Promise<ConversationThread[]> => {
-    try {
-      let list: ConversationThread[] = [];
-      const snap = await get(dbRef(db, `conversationThreads/${conversationId}`));
-      if (snap.exists()) {
-        snap.forEach((c) => {
-          const val = c.val();
-          if (val) list.push({ ...val, id: c.key || val.id });
-        });
-      }
-
-      // Ensure General thread is present
-      if (!list.some((t) => t.id === 'general')) {
-        list.unshift({
-          id: 'general',
-          conversationId,
-          type: 'general',
-          title: 'General',
-          createdAt: Date.now(),
-          updatedAt: Date.now()
-        });
-      }
-
-      threads.value = list;
-      return list;
-    } catch (err) {
-      if (import.meta.env.DEV) {
-        console.warn('[useChat] Failed to load threads:', err);
-      }
-      return threads.value.length > 0 ? threads.value : [
-        {
-          id: 'general',
-          conversationId,
-          type: 'general',
-          title: 'General',
-          createdAt: Date.now(),
-          updatedAt: Date.now()
-        }
-      ];
-    }
+    const list = await getThreads(conversationId);
+    threads.value = list;
+    return list;
   };
 
   const loadHistory = async (targetThreadId = 'all', isRefresh = false) => {
@@ -94,72 +54,15 @@ export function useChat(conversationId: string, initialThreadId = 'general') {
       isMessagesLoading.value = true;
     }
 
-    const startTime = performance.now();
-
     try {
-      // 1. Ensure threads are loaded in parallel with messages
-      const [currentThreads, snap] = await Promise.all([
+      const [currentThreads, fetchedMessages] = await Promise.all([
         loadThreads(),
-        get(dbRef(db, `messages/${conversationId}`))
+        getConversationMessages(conversationId, targetThreadId)
       ]);
 
-      const newMap = new Map<string, ChatMessage>();
-
-      if (snap.exists()) {
-        snap.forEach((childSnap) => {
-          const val = childSnap.val();
-          if (!val) return;
-          if (typeof val.text === 'string' || val.senderId) {
-            // Legacy flat message: messages/{conversationId}/{messageId}
-            const mId = childSnap.key || val.id;
-            if (mId) {
-              newMap.set(mId, {
-                id: mId,
-                conversationId,
-                threadId: val.threadId || 'general',
-                senderId: val.senderId,
-                text: val.text || '',
-                imageUrl: val.imageUrl || null,
-                imageKey: val.imageKey || null,
-                createdAt: val.createdAt || Date.now(),
-                status: val.status || 'sent'
-              });
-            }
-          } else if (typeof val === 'object') {
-            // 3-level thread bucket: messages/{conversationId}/{threadId}/{messageId}
-            const threadKey = childSnap.key || 'general';
-            childSnap.forEach((msgSnap) => {
-              const mVal = msgSnap.val();
-              const mId = msgSnap.key || mVal?.id;
-              if (mVal && mId) {
-                newMap.set(mId, {
-                  id: mId,
-                  conversationId,
-                  threadId: mVal.threadId || threadKey,
-                  senderId: mVal.senderId,
-                  text: mVal.text || '',
-                  imageUrl: mVal.imageUrl || null,
-                  imageKey: mVal.imageKey || null,
-                  createdAt: mVal.createdAt || Date.now(),
-                  status: mVal.status || 'sent'
-                });
-              }
-            });
-          }
-        });
-      }
-
-      // Update messageMap and sort
       messageMap.clear();
-      newMap.forEach((v, k) => messageMap.set(k, v));
+      fetchedMessages.forEach((m) => messageMap.set(m.id, m));
       sortAndSyncMessages();
-
-      if (import.meta.env.DEV) {
-        const elapsed = (performance.now() - startTime).toFixed(1);
-        console.log(
-          `[Perf] Chat: ${elapsed} ms (conversation: ${conversationId} | threads: ${currentThreads.length} | messages: ${messages.value.length})`
-        );
-      }
     } catch (err) {
       if (import.meta.env.DEV) {
         console.error('[useChat] Failed to load message history:', err);
@@ -178,7 +81,42 @@ export function useChat(conversationId: string, initialThreadId = 'general') {
   };
 
   const setupSocketListeners = async () => {
-    // Stateless mode: No socket listeners needed
+    if (!realtimeChannel) {
+      try {
+        realtimeChannel = supabase
+          .channel(`public:messages:${conversationId}`)
+          .on(
+            'postgres_changes',
+            {
+              event: 'INSERT',
+              schema: 'public',
+              table: 'messages',
+              filter: `conversation_id=eq.${conversationId}`
+            },
+            (payload: any) => {
+              if (payload.new) {
+                const newRow = payload.new;
+                const newMsg: ChatMessage = {
+                  id: newRow.id,
+                  conversationId: newRow.conversation_id,
+                  threadId: 'general',
+                  senderId: newRow.sender_id,
+                  senderName: newRow.sender_name || 'Member',
+                  text: newRow.text || '',
+                  imageUrl: newRow.image_url || undefined,
+                  createdAt: newRow.created_at ? new Date(newRow.created_at).getTime() : Date.now(),
+                  read: Boolean(newRow.read)
+                };
+                messageMap.set(newMsg.id, newMsg);
+                sortAndSyncMessages();
+              }
+            }
+          )
+          .subscribe();
+      } catch (err) {
+        console.warn('[useChat] Realtime channel setup note:', err);
+      }
+    }
   };
 
   const sendChatMessage = async (
@@ -188,7 +126,7 @@ export function useChat(conversationId: string, initialThreadId = 'general') {
     targetThreadId?: string
   ): Promise<ChatMessage> => {
     const threadId = targetThreadId || activeThreadId.value || 'general';
-    const msg = await sendMessage(conversationId, text || '', threadId, imageUrl, imageKey);
+    const msg = await sendMessage(conversationId, threadId, text || '', imageUrl, imageKey);
 
     messageMap.set(msg.id, msg);
     sortAndSyncMessages();
@@ -200,12 +138,13 @@ export function useChat(conversationId: string, initialThreadId = 'general') {
     return sendChatMessage(text);
   };
 
-  const handleTyping = () => {
-    // Stateless mode: No-op
-  };
+  const handleTyping = () => {};
 
   const cleanup = () => {
-    clearTimeout(typingTimer);
+    if (realtimeChannel) {
+      supabase.removeChannel(realtimeChannel);
+      realtimeChannel = null;
+    }
   };
 
   return {

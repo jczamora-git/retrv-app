@@ -1,7 +1,5 @@
 import { ref } from 'vue';
-import { ref as dbRef, get, update } from 'firebase/database';
-import { db } from '../firebase';
-import { getApiServerUrl } from '../services/socket';
+import { supabase } from '../utils/supabase';
 import { getSessionUser, currentAppUserId } from './useAuth';
 import type { ChatMessage } from '../types/message';
 import type { Conversation, ConversationThread } from '../types/conversation';
@@ -37,18 +35,11 @@ export function onMessageNew(cb: MessageNewCallback) {
   };
 }
 
-/**
- * Shared stateless chat composable providing one-time reads and writes
- * via Firebase Realtime Database and backend HTTP REST fallback.
- */
 export function useChatSocket() {
   const initSocket = async () => {
     return null;
   };
 
-  /**
-   * Create or retrieve existing 1-to-1 conversation and target thread.
-   */
   const createOrGetConversation = async (
     postId: string | null | undefined,
     otherUserId: string,
@@ -67,22 +58,31 @@ export function useChatSocket() {
       throw new Error('You must be signed in to access conversations.');
     }
 
-    // Deterministic conversation ID for user pair
     const pairKey = [myUid, otherUserId].sort().join('__');
     const convId = `conv_${pairKey}`;
     const now = Date.now();
 
-    const targetThreadId =
-      extra?.threadId || (postId ? `post_${postId}` : 'general');
-    const targetThreadTitle =
-      extra?.postTitle || (postId ? 'Post Discussion' : 'General');
+    const targetThreadId = extra?.threadId || (postId ? `post_${postId}` : 'general');
+    const targetThreadTitle = extra?.postTitle || (postId ? 'Post Discussion' : 'General');
 
-    // 1. Try reading existing conversation from RTDB
     let existingConv: Conversation | null = null;
     try {
-      const snap = await get(dbRef(db, `conversations/${convId}`));
-      if (snap.exists()) {
-        existingConv = snap.val();
+      const { data } = await supabase
+        .from('conversations')
+        .select('*')
+        .eq('id', convId)
+        .maybeSingle();
+
+      if (data) {
+        existingConv = {
+          id: data.id,
+          participantIds: Array.isArray(data.participant_ids) ? data.participant_ids : [myUid, otherUserId],
+          participantDetails: data.participants || {},
+          lastMessage: data.last_message || undefined,
+          unreadCounts: data.unread_counts || {},
+          createdAt: data.created_at ? new Date(data.created_at).getTime() : now,
+          updatedAt: data.updated_at ? new Date(data.updated_at).getTime() : now
+        };
       }
     } catch {}
 
@@ -105,149 +105,96 @@ export function useChatSocket() {
       };
     }
 
-    const conversation: Conversation = {
+    const conversationData: Conversation = {
       id: convId,
       participantIds: [myUid, otherUserId],
       participantDetails,
-      type: 'direct',
+      lastMessage: existingConv?.lastMessage,
+      unreadCounts: existingConv?.unreadCounts || { [myUid]: 0, [otherUserId]: 0 },
       createdAt: existingConv?.createdAt || now,
-      updatedAt: now,
-      lastMessage: existingConv?.lastMessage || undefined,
-      lastMessageAt: existingConv?.lastMessageAt || undefined,
-      lastMessageSenderId: existingConv?.lastMessageSenderId || undefined,
-      unreadCounts: existingConv?.unreadCounts || { [myUid]: 0, [otherUserId]: 0 }
+      updatedAt: now
     };
 
-    const thread: ConversationThread = {
+    const targetThread: ConversationThread = {
       id: targetThreadId,
       conversationId: convId,
-      type: targetThreadId === 'general' ? 'general' : 'post',
-      postId: postId || undefined,
+      type: postId ? 'post' : 'general',
       title: targetThreadTitle,
-      postSubtitle: extra?.postSubtitle,
+      postId: postId || undefined,
+      postSubtitle: extra?.postTitle || extra?.postSubtitle,
       postLocation: extra?.postLocation,
       createdAt: now,
       updatedAt: now
     };
 
-    // Save to RTDB
     try {
-      const updates: Record<string, any> = {};
-      updates[`conversations/${convId}`] = conversation;
-      updates[`userConversations/${myUid}/${convId}`] = {
-        updatedAt: now,
-        lastMessageAt: conversation.lastMessageAt || now
-      };
-      updates[`userConversations/${otherUserId}/${convId}`] = {
-        updatedAt: now,
-        lastMessageAt: conversation.lastMessageAt || now
-      };
-      updates[`conversationThreads/${convId}/${targetThreadId}`] = thread;
-      updates[`conversationThreads/${convId}/general`] = {
-        id: 'general',
-        conversationId: convId,
-        type: 'general',
-        title: 'General',
-        createdAt: existingConv?.createdAt || now,
-        updatedAt: now
-      };
-
-      await update(dbRef(db), updates);
+      await supabase.from('conversations').upsert({
+        id: convId,
+        participant_ids: [myUid, otherUserId],
+        participants: participantDetails,
+        post_id: postId || null,
+        post_title: extra?.postTitle || null,
+        unread_counts: conversationData.unreadCounts,
+        updated_at: new Date(now).toISOString()
+      });
     } catch (err) {
-      if (import.meta.env.DEV) {
-        console.warn('[useChatSocket] Firebase RTDB update note:', err);
-      }
-    }
-
-    const threadsList: ConversationThread[] = [
-      {
-        id: 'general',
-        conversationId: convId,
-        type: 'general',
-        title: 'General',
-        createdAt: conversation.createdAt,
-        updatedAt: conversation.updatedAt
-      }
-    ];
-    if (targetThreadId !== 'general') {
-      threadsList.push(thread);
+      console.warn('[useChatSocket] Save conversation warning:', err);
     }
 
     return {
-      conversation,
-      thread,
-      threads: threadsList
+      conversation: conversationData,
+      thread: targetThread,
+      threads: [
+        {
+          id: 'general',
+          conversationId: convId,
+          type: 'general',
+          title: 'General',
+          createdAt: now,
+          updatedAt: now
+        },
+        ...(targetThreadId !== 'general' ? [targetThread] : [])
+      ]
     };
   };
 
-  /**
-   * Fetch all conversations for active user directly from Firebase RTDB.
-   */
-  const getConversationList = async (): Promise<Conversation[]> => {
-    const session = await getSessionUser();
-    const myUid = currentAppUserId.value || session?.id || session?.uid;
-    if (!myUid) return [];
-
+  const getConversationList = async (myUid: string): Promise<Conversation[]> => {
     try {
-      // 1. Check userConversations index
-      const userConvsSnap = await get(dbRef(db, `userConversations/${myUid}`));
-      if (userConvsSnap.exists()) {
-        const convIds = Object.keys(userConvsSnap.val() || {});
-        if (convIds.length > 0) {
-          const snaps = await Promise.all(
-            convIds.map((cid) => get(dbRef(db, `conversations/${cid}`)))
-          );
-          const list: Conversation[] = [];
-          for (const s of snaps) {
-            if (s.exists()) {
-              list.push(s.val());
-            }
-          }
-          if (list.length > 0) return list;
+      const { data, error } = await supabase
+        .from('conversations')
+        .select('*')
+        .order('updated_at', { ascending: false });
+
+      if (error) throw error;
+
+      const list: Conversation[] = [];
+      (data || []).forEach((row) => {
+        const participantIds: string[] = Array.isArray(row.participant_ids) ? row.participant_ids : [];
+        if (participantIds.includes(myUid) || row.id?.includes(myUid)) {
+          list.push({
+            id: row.id,
+            participantIds: participantIds.length ? participantIds : [myUid],
+            participantDetails: row.participants || {},
+            lastMessage: row.last_message || undefined,
+            unreadCounts: row.unread_counts || {},
+            createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+            updatedAt: row.updated_at ? new Date(row.updated_at).getTime() : Date.now()
+          });
         }
-      }
+      });
 
-      // 2. Direct conversations scan fallback
-      const allConvsSnap = await get(dbRef(db, 'conversations'));
-      if (allConvsSnap.exists()) {
-        const val = allConvsSnap.val();
-        const list: Conversation[] = [];
-        Object.values(val).forEach((c: any) => {
-          if (c && Array.isArray(c.participantIds) && c.participantIds.includes(myUid)) {
-            list.push(c);
-          }
-        });
-        return list;
-      }
+      return list;
     } catch (err) {
-      if (import.meta.env.DEV) {
-        console.warn('[useChatSocket] RTDB conversation fetch note:', err);
-      }
+      console.warn('[useChatSocket] Failed loading conversations:', err);
+      return [];
     }
-
-    return [];
   };
 
-  /**
-   * Fetch all threads for a specific conversation directly from Firebase RTDB.
-   */
-  const getThreads = async (conversationId: string): Promise<ConversationThread[]> => {
-    try {
-      const snap = await get(dbRef(db, `conversationThreads/${conversationId}`));
-      if (snap.exists()) {
-        const threads: ConversationThread[] = [];
-        snap.forEach((c) => {
-          const val = c.val();
-          if (val) threads.push({ ...val, id: c.key || val.id });
-        });
-        if (threads.length > 0) return threads;
-      }
-    } catch {}
-
+  const getThreads = async (convId: string): Promise<ConversationThread[]> => {
     return [
       {
         id: 'general',
-        conversationId,
+        conversationId: convId,
         type: 'general',
         title: 'General',
         createdAt: Date.now(),
@@ -256,79 +203,45 @@ export function useChatSocket() {
     ];
   };
 
-  /**
-   * Fetch message history for a conversation directly from Firebase RTDB.
-   */
   const getConversationMessages = async (
-    conversationId: string,
-    threadId = 'all'
+    convId: string,
+    targetThreadId = 'all'
   ): Promise<ChatMessage[]> => {
-    const list: ChatMessage[] = [];
-
     try {
-      const snap = await get(dbRef(db, `messages/${conversationId}`));
-      if (snap.exists()) {
-        snap.forEach((childSnap) => {
-          const val = childSnap.val();
-          if (!val) return;
-          if (typeof val.text === 'string' || val.senderId) {
-            // Flat message: messages/{conversationId}/{messageId}
-            const mId = childSnap.key || val.id;
-            list.push({
-              id: mId,
-              conversationId,
-              threadId: val.threadId || 'general',
-              senderId: val.senderId,
-              text: val.text || '',
-              imageUrl: val.imageUrl || null,
-              imageKey: val.imageKey || null,
-              createdAt: val.createdAt || Date.now(),
-              status: val.status || 'sent'
-            });
-          } else if (typeof val === 'object') {
-            // 3-level thread bucket: messages/{conversationId}/{threadId}/{messageId}
-            const tKey = childSnap.key || 'general';
-            childSnap.forEach((mSnap) => {
-              const mVal = mSnap.val();
-              const mId = mSnap.key || mVal?.id;
-              if (mVal && mId) {
-                list.push({
-                  id: mId,
-                  conversationId,
-                  threadId: mVal.threadId || tKey,
-                  senderId: mVal.senderId,
-                  text: mVal.text || '',
-                  imageUrl: mVal.imageUrl || null,
-                  imageKey: mVal.imageKey || null,
-                  createdAt: mVal.createdAt || Date.now(),
-                  status: mVal.status || 'sent'
-                });
-              }
-            });
-          }
-        });
+      const { data, error } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('conversation_id', convId)
+        .order('created_at', { ascending: true });
 
-        if (list.length > 0) {
-          if (threadId !== 'all') {
-            return list.filter((m) => m.threadId === threadId);
-          }
-          return list;
-        }
-      }
-    } catch {}
+      if (error) throw error;
 
-    return list;
+      const messages: ChatMessage[] = (data || []).map((row) => ({
+        id: row.id,
+        conversationId: row.conversation_id,
+        threadId: 'general',
+        senderId: row.sender_id,
+        senderName: row.sender_name || 'Member',
+        text: row.text || '',
+        imageUrl: row.image_url || undefined,
+        createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+        read: Boolean(row.read)
+      }));
+
+      return messages;
+    } catch (err) {
+      console.warn('[useChatSocket] Failed fetching messages:', err);
+      return [];
+    }
   };
 
-  /**
-   * Send message via Firebase RTDB writes.
-   */
   const sendMessage = async (
     conversationId: string,
+    threadId: string,
     text: string,
-    threadId = 'general',
     imageUrl?: string | null,
-    imageKey?: string | null
+    imageKey?: string | null,
+    imagePath?: string | null
   ): Promise<ChatMessage> => {
     const session = await getSessionUser();
     const myUid = currentAppUserId.value || session?.id || session?.uid;
@@ -337,78 +250,56 @@ export function useChatSocket() {
     }
 
     const now = Date.now();
-    const messageId = `msg_${now}_${Math.random().toString(36).substring(2, 8)}`;
+    const msgId = `msg_${now}_${Math.random().toString(36).substring(2, 7)}`;
+    const cleanText = (text || '').trim();
 
-    const message: ChatMessage = {
-      id: messageId,
+    const chatMsg: ChatMessage = {
+      id: msgId,
       conversationId,
-      threadId,
+      threadId: threadId || 'general',
       senderId: myUid,
-      text: text || '',
-      imageUrl: imageUrl || null,
-      imageKey: imageKey || null,
+      senderName: session?.name || 'Member',
+      text: cleanText,
+      imageUrl: imageUrl || undefined,
+      imageKey: imageKey || undefined,
       createdAt: now,
-      status: 'sent'
+      read: false
     };
 
     try {
-      const updates: Record<string, any> = {};
-      // Save in both flat and thread paths for maximum compatibility
-      updates[`messages/${conversationId}/${messageId}`] = message;
-      updates[`messages/${conversationId}/${threadId}/${messageId}`] = message;
+      await supabase.from('messages').insert({
+        id: msgId,
+        conversation_id: conversationId,
+        sender_id: myUid,
+        sender_name: chatMsg.senderName,
+        text: cleanText,
+        image_url: imageUrl || null,
+        read: false,
+        created_at: new Date(now).toISOString()
+      });
 
-      // Update conversation metadata
-      updates[`conversations/${conversationId}/lastMessage`] = text || (imageUrl ? '📷 Photo' : 'Message');
-      updates[`conversations/${conversationId}/lastMessageAt`] = now;
-      updates[`conversations/${conversationId}/lastMessageSenderId`] = myUid;
-      updates[`conversations/${conversationId}/lastMessageThreadId`] = threadId;
-      updates[`conversations/${conversationId}/updatedAt`] = now;
-
-      // Update userConversations timestamp
-      updates[`userConversations/${myUid}/${conversationId}/updatedAt`] = now;
-      updates[`userConversations/${myUid}/${conversationId}/lastMessageAt`] = now;
-
-      await update(dbRef(db), updates);
+      await supabase.from('conversations').update({
+        last_message: cleanText || (imageUrl ? '📷 Photo' : ''),
+        last_message_at: new Date(now).toISOString(),
+        updated_at: new Date(now).toISOString()
+      }).eq('id', conversationId);
     } catch (err) {
-      if (import.meta.env.DEV) {
-        console.warn('[useChatSocket] Message persistence note:', err);
-      }
+      console.error('[useChatSocket] Send message error:', err);
+      throw err;
     }
 
-    return message;
+    messageNewCallbacks.forEach((cb) => cb(chatMsg));
+    return chatMsg;
   };
 
-  /**
-   * Mark conversation as read.
-   */
-  const markConversationAsRead = async (
-    conversationId: string,
-    threadId?: string
-  ): Promise<Conversation | null> => {
-    const session = await getSessionUser();
-    const myUid = currentAppUserId.value || session?.id || session?.uid;
-    if (!myUid) return null;
-
+  const markConversationAsRead = async (conversationId: string, uid: string) => {
     try {
-      const updates: Record<string, any> = {};
-      updates[`conversations/${conversationId}/unreadCounts/${myUid}`] = 0;
-      if (threadId) {
-        updates[`conversationThreads/${conversationId}/${threadId}/unreadCounts/${myUid}`] = 0;
-      }
-      await update(dbRef(db), updates);
+      await supabase.from('messages')
+        .update({ read: true })
+        .eq('conversation_id', conversationId)
+        .neq('sender_id', uid);
     } catch {}
-
-    return null;
   };
-
-  // Safe typed helpers for lifecycle compatibility
-  const joinConversation = async (_conversationId?: string, _threadId?: string) => {};
-  const joinThread = async (_conversationId?: string, _threadId?: string) => {};
-  const leaveThread = async (_conversationId?: string, _threadId?: string) => {};
-  const leaveConversation = async (_conversationId?: string) => {};
-  const emitTypingStart = async (_conversationId?: string, _threadId?: string) => {};
-  const emitTypingStop = async (_conversationId?: string, _threadId?: string) => {};
-  const disconnectSocket = () => {};
 
   return {
     isConnected,
@@ -417,14 +308,7 @@ export function useChatSocket() {
     getConversationList,
     getThreads,
     getConversationMessages,
-    joinConversation,
-    joinThread,
-    leaveThread,
-    leaveConversation,
     sendMessage,
-    markConversationAsRead,
-    emitTypingStart,
-    emitTypingStop,
-    disconnectSocket
+    markConversationAsRead
   };
 }

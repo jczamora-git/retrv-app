@@ -1,6 +1,5 @@
 import { ref } from 'vue';
-import { ref as dbRef, get } from 'firebase/database';
-import { db } from '../firebase';
+import { supabase } from '../utils/supabase';
 import type { Profile } from '../types/profile';
 
 // Shared global reactive profile cache keyed by UID
@@ -25,23 +24,31 @@ export const loadProfile = async (uid: string | null | undefined): Promise<Profi
     return inFlightPromises.get(uid)!;
   }
 
-  // 3. Perform one-time fetch and cache
+  // 3. Perform one-time fetch from Supabase and cache
   const fetchPromise = (async () => {
     try {
-      const snap = await get(dbRef(db, `profiles/${uid}`));
-      if (snap.exists()) {
-        const val = snap.val();
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', uid)
+        .maybeSingle();
+
+      if (error && error.code !== 'PGRST116') {
+        throw error;
+      }
+
+      if (data) {
         const profile: Profile = {
-          id: uid,
-          name: val.name || '',
-          username: val.username || '',
-          phone: val.phone || '',
-          email: val.email || undefined,
-          avatarUrl: val.avatarUrl || null,
-          avatarKey: val.avatarKey || null,
-          avatarPath: val.avatarPath || null,
-          createdAt: typeof val.createdAt === 'number' ? val.createdAt : Date.now(),
-          updatedAt: typeof val.updatedAt === 'number' ? val.updatedAt : Date.now()
+          id: data.id || uid,
+          name: data.name || '',
+          username: data.username || '',
+          phone: data.phone || '',
+          email: data.email || undefined,
+          avatarUrl: data.avatar_url || data.avatarUrl || null,
+          avatarKey: data.avatar_key || data.avatarKey || null,
+          avatarPath: null,
+          createdAt: data.created_at ? new Date(data.created_at).getTime() : Date.now(),
+          updatedAt: data.updated_at ? new Date(data.updated_at).getTime() : Date.now()
         };
         profilesByUid.value[uid] = profile;
         return profile;

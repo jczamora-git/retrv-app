@@ -165,7 +165,6 @@ import PostCard from "../components/PostCard.vue";
 import PageHeader from "../components/PageHeader.vue";
 import AchievementsSection from "../components/AchievementsSection.vue";
 import AchievementBadge from "../components/AchievementBadge.vue";
-import { auth } from "../firebase";
 import { useAuth, getSessionUser, currentAppUserId } from "../composables/useAuth";
 import { useProfiles, loadProfile } from "../composables/useProfiles";
 import { usePosts } from "../composables/usePosts";

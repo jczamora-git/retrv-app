@@ -1,13 +1,11 @@
 import { ref, computed } from 'vue';
-import { ref as dbRef, onValue, set, update, get } from 'firebase/database';
-import { db } from '../firebase';
+import { supabase } from '../utils/supabase';
 import { useAuth, sessionUid, getSessionUser } from './useAuth';
-import { getApiServerUrl } from '../services/socket';
 import type { AppNotification } from '../types/notification';
 
 const notifications = ref<AppNotification[]>([]);
 const loading = ref(false);
-let isSubscribed = false;
+let realtimeChannel: any = null;
 
 export const unreadNotificationCount = computed<number>(() => {
   return notifications.value.filter((n) => !n.read).length;
@@ -20,90 +18,100 @@ export function useNotifications() {
     notifications.value.sort((a, b) => b.createdAt - a.createdAt);
   };
 
-  /**
-   * Subscribe to notifications for the active user.
-   */
-  const subscribeToNotifications = async () => {
-    const session = await getSessionUser();
-    const myUid = session?.uid || sessionUid.value;
-    if (!myUid) return;
+  const mapNotificationRow = (row: any): AppNotification => {
+    return {
+      id: row.id,
+      type: row.type || 'comment',
+      actorId: row.actor_id || row.actorId || 'anonymous',
+      actorName: row.actor_name || row.actorName || 'Community Member',
+      actorUsername: row.actor_username || row.actorUsername,
+      actorAvatarUrl: row.actor_avatar_url || row.actorAvatarUrl || null,
+      postId: row.post_id || row.postId,
+      postTitle: row.post_title || row.postTitle,
+      commentId: row.comment_id || row.commentId,
+      text: row.text || row.body || '',
+      createdAt: row.created_at ? (typeof row.created_at === 'number' ? row.created_at : new Date(row.created_at).getTime()) : Date.now(),
+      read: Boolean(row.read)
+    };
+  };
 
-    if (isSubscribed) return;
-    isSubscribed = true;
-    loading.value = true;
-
-    // 1. Firebase RTDB fetch/listener
+  const fetchNotifications = async (myUid: string) => {
     try {
-      const notifsRef = dbRef(db, `notifications/${myUid}`);
-      const snap = await get(notifsRef);
-      if (snap.exists()) {
-        const val = snap.val();
-        const loaded: AppNotification[] = [];
-        Object.entries(val).forEach(([id, item]: [string, any]) => {
-          loaded.push({
-            id,
-            type: item.type || 'comment',
-            actorId: item.actorId || 'anonymous',
-            actorName: item.actorName || 'Community Member',
-            actorUsername: item.actorUsername,
-            actorAvatarUrl: item.actorAvatarUrl || null,
-            postId: item.postId,
-            postTitle: item.postTitle,
-            commentId: item.commentId,
-            text: item.text || '',
-            createdAt: typeof item.createdAt === 'number' ? item.createdAt : Date.now(),
-            read: Boolean(item.read)
-          });
-        });
-        notifications.value = loaded;
-        sortNotifications();
-      }
-    } catch {
+      const { data, error } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('user_id', myUid)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      notifications.value = (data || []).map(mapNotificationRow);
+      sortNotifications();
+    } catch (err) {
+      console.warn('[useNotifications] Fetch notifications warning:', err);
     } finally {
       loading.value = false;
     }
   };
 
-  /**
-   * Mark a single notification as read.
-   */
+  const subscribeToNotifications = async () => {
+    const session = await getSessionUser();
+    const myUid = session?.uid || sessionUid.value;
+    if (!myUid) return;
+
+    loading.value = true;
+    await fetchNotifications(myUid);
+
+    if (realtimeChannel) {
+      supabase.removeChannel(realtimeChannel);
+      realtimeChannel = null;
+    }
+
+    try {
+      realtimeChannel = supabase
+        .channel(`public:notifications:${myUid}`)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'notifications',
+            filter: `user_id=eq.${myUid}`
+          },
+          () => {
+            fetchNotifications(myUid);
+          }
+        )
+        .subscribe();
+    } catch (err) {
+      console.warn('[useNotifications] Realtime note:', err);
+    }
+  };
+
   const markAsRead = async (notificationId: string) => {
-    const myUid = sessionUid.value || currentProfile.value?.id;
     const target = notifications.value.find((n) => n.id === notificationId);
     if (target) {
       target.read = true;
     }
 
-    if (myUid) {
-      try {
-        await update(dbRef(db, `notifications/${myUid}/${notificationId}`), { read: true });
-      } catch {}
-    }
+    try {
+      await supabase.from('notifications').update({ read: true }).eq('id', notificationId);
+    } catch {}
   };
 
-  /**
-   * Mark all notifications as read for current user.
-   */
   const markAllAsRead = async () => {
-    const myUid = sessionUid.value || currentProfile.value?.id;
+    const session = await getSessionUser();
+    const myUid = session?.uid || sessionUid.value;
     notifications.value.forEach((n) => {
       n.read = true;
     });
 
     if (myUid) {
       try {
-        const updates: Record<string, any> = {};
-        notifications.value.forEach((n) => {
-          updates[`notifications/${myUid}/${n.id}/read`] = true;
-        });
-        await update(dbRef(db), updates);
+        await supabase.from('notifications').update({ read: true }).eq('user_id', myUid);
       } catch {}
     }
   };
 
-  /**
-   * Create and deliver a comment notification to the post author.
-   */
   const createCommentNotification = async (params: {
     postAuthorId: string;
     postId: string;
@@ -113,36 +121,26 @@ export function useNotifications() {
   }) => {
     const session = await getSessionUser();
     const currentUid = session?.uid || currentProfile.value?.id;
-    if (!currentUid) return;
-
-    if (params.postAuthorId === currentUid) {
-      return;
-    }
+    if (!currentUid || params.postAuthorId === currentUid) return;
 
     const notifId = `notif_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-    const notification: AppNotification = {
+    const newRecord = {
       id: notifId,
+      user_id: params.postAuthorId,
       type: 'comment',
-      actorId: currentUid,
-      actorName: currentProfile.value?.name || session?.name || 'Community Member',
-      actorUsername: currentProfile.value?.username || session?.username || 'user',
-      actorAvatarUrl: currentProfile.value?.avatarUrl || null,
-      postId: params.postId,
-      postTitle: params.postTitle,
-      commentId: params.commentId,
-      text: params.commentText.trim().slice(0, 100),
-      createdAt: Date.now(),
+      title: 'New comment on your post',
+      body: params.commentText.trim().slice(0, 100),
+      post_id: params.postId,
+      actor_id: currentUid,
+      actor_name: currentProfile.value?.name || session?.name || 'Community Member',
       read: false
     };
 
     try {
-      await set(dbRef(db, `notifications/${params.postAuthorId}/${notifId}`), notification);
+      await supabase.from('notifications').insert(newRecord);
     } catch {}
   };
 
-  /**
-   * Create and deliver a reply notification to the parent comment author.
-   */
   const createReplyNotification = async (params: {
     targetAuthorId: string;
     postId: string;
@@ -152,36 +150,26 @@ export function useNotifications() {
   }) => {
     const session = await getSessionUser();
     const currentUid = session?.uid || currentProfile.value?.id;
-    if (!currentUid) return;
-
-    if (params.targetAuthorId === currentUid) {
-      return;
-    }
+    if (!currentUid || params.targetAuthorId === currentUid) return;
 
     const notifId = `notif_reply_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-    const notification: AppNotification = {
+    const newRecord = {
       id: notifId,
+      user_id: params.targetAuthorId,
       type: 'reply',
-      actorId: currentUid,
-      actorName: currentProfile.value?.name || session?.name || 'Community Member',
-      actorUsername: currentProfile.value?.username || session?.username || 'user',
-      actorAvatarUrl: currentProfile.value?.avatarUrl || null,
-      postId: params.postId,
-      postTitle: params.postTitle,
-      commentId: params.commentId,
-      text: params.replyText.trim().slice(0, 100),
-      createdAt: Date.now(),
+      title: 'New reply to your comment',
+      body: params.replyText.trim().slice(0, 100),
+      post_id: params.postId,
+      actor_id: currentUid,
+      actor_name: currentProfile.value?.name || session?.name || 'Community Member',
       read: false
     };
 
     try {
-      await set(dbRef(db, `notifications/${params.targetAuthorId}/${notifId}`), notification);
+      await supabase.from('notifications').insert(newRecord);
     } catch {}
   };
 
-  /**
-   * Create and deliver a community merit notification to the helper.
-   */
   const createMeritNotification = async (params: {
     recipientId: string;
     postId: string;
@@ -190,29 +178,23 @@ export function useNotifications() {
   }) => {
     const session = await getSessionUser();
     const currentUid = session?.uid || currentProfile.value?.id;
-    if (!currentUid) return;
-
-    if (params.recipientId === currentUid) {
-      return;
-    }
+    if (!currentUid || params.recipientId === currentUid) return;
 
     const notifId = `notif_merit_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-    const notification: AppNotification = {
+    const newRecord = {
       id: notifId,
+      user_id: params.recipientId,
       type: 'merit_awarded',
-      actorId: currentUid,
-      actorName: params.awardedByName || currentProfile.value?.name || 'A community member',
-      actorUsername: currentProfile.value?.username || session?.username || 'user',
-      actorAvatarUrl: currentProfile.value?.avatarUrl || null,
-      postId: params.postId,
-      postTitle: params.postTitle,
-      text: `${params.awardedByName} awarded you a Community Merit for helping recover ${params.postTitle || 'this item'}.`,
-      createdAt: Date.now(),
+      title: 'Community Merit Awarded',
+      body: `${params.awardedByName} awarded you a Community Merit for helping recover ${params.postTitle || 'this item'}.`,
+      post_id: params.postId,
+      actor_id: currentUid,
+      actor_name: params.awardedByName || currentProfile.value?.name || 'A community member',
       read: false
     };
 
     try {
-      await set(dbRef(db, `notifications/${params.recipientId}/${notifId}`), notification);
+      await supabase.from('notifications').insert(newRecord);
     } catch {}
   };
 

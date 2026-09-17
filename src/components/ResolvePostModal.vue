@@ -163,12 +163,12 @@
 import { ref, computed, watch, onMounted } from 'vue';
 import { IonModal, IonSpinner } from '@ionic/vue';
 import { Search, X, Award } from 'lucide-vue-next';
-import { ref as dbRef, get } from 'firebase/database';
-import { db } from '../firebase';
 import UserAvatar from './UserAvatar.vue';
 import { useAuth } from '../composables/useAuth';
 import type { Post } from '../types/post';
 import type { PostComment } from '../types/comment';
+
+import { supabase } from '../utils/supabase';
 
 interface CandidateMember {
   id: string;
@@ -199,19 +199,20 @@ const loadingCandidates = ref(false);
 const loadSuggestedMembers = async () => {
   loadingCandidates.value = true;
   try {
-    const snap = await get(dbRef(db, 'profiles'));
-    if (snap.exists()) {
-      const val = snap.val();
+    const { data, error } = await supabase.from('profiles').select('*');
+    if (error) throw error;
+    if (data) {
       const list: CandidateMember[] = [];
       const myId = currentProfile.value?.id || props.post.authorId;
 
-      Object.entries(val).forEach(([uid, item]: [string, any]) => {
+      data.forEach((item: any) => {
+        const uid = item.id;
         if (uid && uid !== myId && uid !== 'anonymous') {
           list.push({
             id: uid,
             name: item.name || 'Community Member',
             username: item.username || 'user',
-            avatarUrl: item.avatarUrl || null
+            avatarUrl: item.avatar_url || item.avatarUrl || null
           });
         }
       });

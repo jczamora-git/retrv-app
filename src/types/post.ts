@@ -26,6 +26,7 @@ export interface Post {
   authorId: string;
   authorName: string;
   authorUsername: string;
+  authorAvatar?: string | null;
   type: PostType;
   title: string;
   category: PostCategory;
@@ -36,6 +37,7 @@ export interface Post {
   imageUrl?: string | null;
   imageKey?: string | null;
   imagePath?: string | null;
+  photos?: string[];
   status: PostStatus;
   helpfulCount?: number;
   commentsCount?: number;

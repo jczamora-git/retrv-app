@@ -288,8 +288,7 @@ import { useProfiles } from '../composables/useProfiles';
 import { usePosts } from '../composables/usePosts';
 import { useImageUpload } from '../composables/useImageUpload';
 import { getChatServerUrl } from '../services/socket';
-import { ref as dbRef, get } from 'firebase/database';
-import { db } from '../firebase';
+import { supabase } from '../utils/supabase';
 import type { Post } from '../types/post';
 import type { Profile } from '../types/profile';
 import type { ChatMessage } from '../types/message';
@@ -582,9 +581,16 @@ onMounted(async () => {
 
     if (!convData) {
       try {
-        const snap = await get(dbRef(db, `conversations/${conversationId.value}`));
-        if (snap.exists()) {
-          convData = snap.val();
+        const { data } = await supabase
+          .from('conversations')
+          .select('*')
+          .eq('id', conversationId.value)
+          .maybeSingle();
+        if (data) {
+          convData = {
+            ...data,
+            participantIds: data.participant_ids || data.participantIds || []
+          };
         }
       } catch {}
     }

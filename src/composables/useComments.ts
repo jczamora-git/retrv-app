@@ -1,14 +1,5 @@
 import { ref } from "vue";
-import {
-  ref as dbRef,
-  onValue,
-  push,
-  set,
-  remove,
-  get,
-  update
-} from "firebase/database";
-import { db } from "../firebase";
+import { supabase } from "../utils/supabase";
 import { useAuth } from "./useAuth";
 import { useNotifications } from "./useNotifications";
 import type { PostComment } from "../types/comment";
@@ -18,49 +9,69 @@ export function useComments() {
   const comments = ref<PostComment[]>([]);
   const commentsLoading = ref(false);
 
-  let unsubscribe: (() => void) | null = null;
+  let realtimeChannel: any = null;
+
+  const mapCommentRow = (row: any): PostComment => {
+    return {
+      id: row.id,
+      postId: row.post_id || row.postId,
+      authorId: row.author_id || row.authorId || "anonymous",
+      authorName: row.author_name || row.authorName || "Community Member",
+      authorUsername: row.author_username || row.authorUsername || "member",
+      content: row.content || "",
+      createdAt: row.created_at ? (typeof row.created_at === "number" ? row.created_at : new Date(row.created_at).getTime()) : Date.now(),
+      updatedAt: row.updated_at ? (typeof row.updated_at === "number" ? row.updated_at : new Date(row.updated_at).getTime()) : Date.now(),
+      parentCommentId: row.parent_comment_id || row.parentCommentId || null,
+      rootCommentId: row.root_comment_id || row.rootCommentId || null
+    };
+  };
+
+  const fetchCommentsForPost = async (postId: string) => {
+    if (!postId) return;
+    try {
+      const { data, error } = await supabase
+        .from("comments")
+        .select("*")
+        .eq("post_id", postId)
+        .order("created_at", { ascending: true });
+
+      if (error) throw error;
+      comments.value = (data || []).map(mapCommentRow);
+    } catch (err) {
+      console.error("[useComments] Failed fetching comments:", err);
+    } finally {
+      commentsLoading.value = false;
+    }
+  };
 
   const subscribeToComments = (postId: string) => {
     commentsLoading.value = true;
-    if (unsubscribe) {
-      unsubscribe();
-      unsubscribe = null;
+    fetchCommentsForPost(postId);
+
+    if (realtimeChannel) {
+      supabase.removeChannel(realtimeChannel);
+      realtimeChannel = null;
     }
 
-    const commentsNode = dbRef(db, `comments/${postId}`);
-    const unsub = onValue(
-      commentsNode,
-      (snapshot) => {
-        const loaded: PostComment[] = [];
-        if (snapshot.exists()) {
-          const val = snapshot.val();
-          Object.entries(val).forEach(([id, c]: [string, any]) => {
-            loaded.push({
-              id,
-              postId,
-              authorId: c.authorId || "anonymous",
-              authorName: c.authorName || "Community Member",
-              authorUsername: c.authorUsername || "member",
-              content: c.content || "",
-              createdAt: typeof c.createdAt === "number" ? c.createdAt : Date.now(),
-              updatedAt: typeof c.updatedAt === "number" ? c.updatedAt : Date.now(),
-              parentCommentId: c.parentCommentId || null,
-              rootCommentId: c.rootCommentId || null
-            });
-          });
-        }
-        // Chronological order for comments (oldest to newest)
-        loaded.sort((a, b) => a.createdAt - b.createdAt);
-        comments.value = loaded;
-        commentsLoading.value = false;
-      },
-      (error) => {
-        console.error("Comments subscription failed:", error);
-        commentsLoading.value = false;
-      }
-    );
-
-    unsubscribe = () => unsub();
+    try {
+      realtimeChannel = supabase
+        .channel(`public:comments:${postId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "comments",
+            filter: `post_id=eq.${postId}`
+          },
+          () => {
+            fetchCommentsForPost(postId);
+          }
+        )
+        .subscribe();
+    } catch (err) {
+      console.warn("[useComments] Realtime subscription note:", err);
+    }
   };
 
   const addComment = async (
@@ -80,37 +91,33 @@ export function useComments() {
       throw new Error("Comment cannot be empty.");
     }
 
-    const commentsNode = dbRef(db, `comments/${postId}`);
-    const newCommentRef = push(commentsNode);
-    const commentId = newCommentRef.key!;
-    const now = Date.now();
+    const commentId = `comment_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    const now = new Date().toISOString();
 
-    const newComment: Omit<PostComment, "id"> = {
-      postId,
-      authorId: currentProfile.value.id,
-      authorName: currentProfile.value.name,
-      authorUsername: currentProfile.value.username,
+    const newCommentRecord = {
+      id: commentId,
+      post_id: postId,
+      author_id: currentProfile.value.id,
+      author_name: currentProfile.value.name,
+      author_username: currentProfile.value.username,
       content: cleanContent,
-      createdAt: now,
-      updatedAt: now,
-      parentCommentId: replyOptions?.parentCommentId || null,
-      rootCommentId: replyOptions?.rootCommentId || null
+      created_at: now
     };
 
-    await set(newCommentRef, newComment);
+    const { error } = await supabase.from("comments").insert(newCommentRecord);
+    if (error) throw error;
 
-    // Update commentsCount on post and notify post author / reply author
+    // Notify author
     try {
-      const postRef = dbRef(db, `posts/${postId}`);
-      const snap = await get(postRef);
-      if (snap.exists()) {
-        const postData = snap.val();
-        const currentCount = postData.commentsCount || 0;
-        await update(postRef, { commentsCount: currentCount + 1 });
+      const { data: postData } = await supabase
+        .from("posts")
+        .select("title, author_id")
+        .eq("id", postId)
+        .maybeSingle();
 
+      if (postData) {
         const { createCommentNotification, createReplyNotification } = useNotifications();
 
-        // If it's a reply to another comment
         if (replyOptions?.parentAuthorId) {
           createReplyNotification({
             targetAuthorId: replyOptions.parentAuthorId,
@@ -118,24 +125,24 @@ export function useComments() {
             postTitle: postData.title,
             commentId,
             replyText: cleanContent
-          }).catch((err) => console.warn("Failed to deliver reply notification:", err));
+          }).catch(() => {});
         }
 
-        // Notify post author if post author is not commenter and not the parent comment author (to avoid duplicate notifications)
-        if (postData.authorId && postData.authorId !== replyOptions?.parentAuthorId) {
+        if (postData.author_id && postData.author_id !== replyOptions?.parentAuthorId && postData.author_id !== currentProfile.value.id) {
           createCommentNotification({
-            postAuthorId: postData.authorId,
+            postAuthorId: postData.author_id,
             postId,
             postTitle: postData.title,
             commentId,
             commentText: cleanContent
-          }).catch((err) => console.warn("Failed to deliver comment notification:", err));
+          }).catch(() => {});
         }
       }
     } catch (e) {
-      console.warn("Could not update commentsCount or notify author:", e);
+      console.warn("Could not notify author:", e);
     }
 
+    await fetchCommentsForPost(postId);
     return commentId;
   };
 
@@ -150,25 +157,16 @@ export function useComments() {
       throw new Error("You can only delete your own comments.");
     }
 
-    await remove(dbRef(db, `comments/${postId}/${commentId}`));
+    const { error } = await supabase.from("comments").delete().eq("id", commentId);
+    if (error) throw error;
 
-    // Update commentsCount on post
-    try {
-      const postRef = dbRef(db, `posts/${postId}`);
-      const snap = await get(postRef);
-      if (snap.exists()) {
-        const currentCount = snap.val().commentsCount || 1;
-        await update(postRef, { commentsCount: Math.max(0, currentCount - 1) });
-      }
-    } catch (e) {
-      console.warn("Could not decrement commentsCount:", e);
-    }
+    comments.value = comments.value.filter((c) => c.id !== commentId);
   };
 
   const stopCommentsSubscription = () => {
-    if (unsubscribe) {
-      unsubscribe();
-      unsubscribe = null;
+    if (realtimeChannel) {
+      supabase.removeChannel(realtimeChannel);
+      realtimeChannel = null;
     }
   };
 

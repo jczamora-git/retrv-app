@@ -212,18 +212,10 @@ import {
   toastController,
 } from "@ionic/vue";
 import { ChevronRight } from "lucide-vue-next";
-import {
-  get,
-  onValue,
-  push,
-  ref as databaseRef,
-  remove,
-  update,
-} from "firebase/database";
 import AppDock from "../components/AppDock.vue";
 import ItemDetailsModal from "../components/ItemDetailsModal.vue";
 import ReportItemModal from "../components/ReportItemModal.vue";
-import { db } from "../firebase";
+import { supabase } from "../utils/supabase";
 import type {
   FieldName,
   FormErrors,
@@ -251,8 +243,6 @@ const form = reactive<LostFoundForm>({
   type: "Lost",
   status: "Unclaimed",
 });
-
-let unsubscribe: (() => void) | undefined;
 
 const claimedCount = computed(
   () => items.value.filter((i) => i.status === "Claimed").length
@@ -292,20 +282,35 @@ const showToast = async (
   await toast.present();
 };
 
-const handleRefresh = async (event: CustomEvent) => {
+const fetchItems = async () => {
   try {
-    const snapshot = await get(databaseRef(db, "lost_found"));
-    items.value = snapshot.exists()
-      ? Object.entries(snapshot.val()).map(([id, item]) => ({
-          id,
-          ...(item as Omit<LostFoundItem, "id">),
-        }))
-      : [];
+    const { data, error } = await supabase
+      .from("lost_found")
+      .select("*")
+      .order("created_at", { ascending: false });
+    if (error) {
+      console.error("Supabase fetch error:", error);
+      return;
+    }
+    items.value = (data || []).map((row: any) => ({
+      id: row.id,
+      itemName: row.item_name || row.itemName,
+      description: row.description || "",
+      location: row.location || "",
+      date: row.date || new Date().toISOString().split("T")[0],
+      type: row.type || "Lost",
+      status: row.status || "Unclaimed",
+    }));
   } catch (err) {
-    console.error("Refresh failed:", err);
+    console.error("Fetch items failed:", err);
   } finally {
-    event.detail.complete();
+    loading.value = false;
   }
+};
+
+const handleRefresh = async (event: CustomEvent) => {
+  await fetchItems();
+  event.detail.complete();
 };
 
 const handleTabSelect = (tab: "home" | "messages" | "profile") => {
@@ -370,20 +375,30 @@ const handleSaveItem = async () => {
   saving.value = true;
   const editing = Boolean(editingId.value);
   const payload = {
-    itemName: form.itemName.trim(),
+    item_name: form.itemName.trim(),
     description: form.description.trim(),
     location: form.location.trim(),
     date: form.date,
     type: form.type,
     status: form.status,
+    updated_at: new Date().toISOString(),
   };
 
   try {
     if (editingId.value) {
-      await update(databaseRef(db, `lost_found/${editingId.value}`), payload);
+      const { error } = await supabase
+        .from("lost_found")
+        .update(payload)
+        .eq("id", editingId.value);
+      if (error) throw error;
     } else {
-      await push(databaseRef(db, "lost_found"), payload);
+      const id = `lf_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const { error } = await supabase
+        .from("lost_found")
+        .insert({ id, ...payload, created_at: new Date().toISOString() });
+      if (error) throw error;
     }
+    await fetchItems();
     handleCloseReport();
     await showToast(
       editing ? "✓ Item updated successfully" : "✓ Item reported successfully"
@@ -398,7 +413,9 @@ const handleSaveItem = async () => {
 
 const handleDeleteItem = async (id: string) => {
   try {
-    await remove(databaseRef(db, `lost_found/${id}`));
+    const { error } = await supabase.from("lost_found").delete().eq("id", id);
+    if (error) throw error;
+    await fetchItems();
     selectedItem.value = null;
     await showToast("Item deleted.");
   } catch (error) {
@@ -411,9 +428,12 @@ const handleToggleStatus = async (item: LostFoundItem) => {
   try {
     const nextStatus: ItemStatus =
       item.status === "Claimed" ? "Unclaimed" : "Claimed";
-    await update(databaseRef(db, `lost_found/${item.id}`), {
-      status: nextStatus,
-    });
+    const { error } = await supabase
+      .from("lost_found")
+      .update({ status: nextStatus, updated_at: new Date().toISOString() })
+      .eq("id", item.id);
+    if (error) throw error;
+    await fetchItems();
     // Update active view
     if (selectedItem.value && selectedItem.value.id === item.id) {
       selectedItem.value.status = nextStatus;
@@ -439,26 +459,27 @@ const formatDate = (val: string) => {
       }).format(parsed);
 };
 
+let realtimeChannel: any = null;
+
 onMounted(() => {
-  unsubscribe = onValue(
-    databaseRef(db, "lost_found"),
-    (snapshot) => {
-      items.value = snapshot.exists()
-        ? Object.entries(snapshot.val()).map(([id, item]) => ({
-            id,
-            ...(item as Omit<LostFoundItem, "id">),
-          }))
-        : [];
-      loading.value = false;
-    },
-    (err) => {
-      console.error("Firebase onValue error:", err);
-      loading.value = false;
-    }
-  );
+  fetchItems();
+  realtimeChannel = supabase
+    .channel("lost_found_changes")
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "lost_found" },
+      () => {
+        fetchItems();
+      }
+    )
+    .subscribe();
 });
 
-onUnmounted(() => unsubscribe?.());
+onUnmounted(() => {
+  if (realtimeChannel) {
+    supabase.removeChannel(realtimeChannel);
+  }
+});
 </script>
 
 <style scoped>
