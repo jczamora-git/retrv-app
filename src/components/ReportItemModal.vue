@@ -469,7 +469,7 @@ const handleSubmit = () => {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  box-shadow: 0 4px 16px rgba(0, 122, 255, 0.3);
+  box-shadow: 0 4px 16px rgba(38, 64, 219, 0.25);
   transition: transform 0.15s ease;
 }
 

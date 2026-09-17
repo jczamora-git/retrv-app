@@ -267,8 +267,8 @@ const handleInstagram = async () => {
   width: 52px;
   height: 52px;
   border-radius: 50%;
-  background: var(--app-primary-soft, #ddf3ff);
-  color: var(--app-primary, #2f9fe8);
+  background: var(--app-primary-soft, rgba(38, 64, 219, 0.10));
+  color: var(--app-primary, #2640DB);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -324,7 +324,7 @@ const handleInstagram = async () => {
 }
 
 .share-url-box:hover {
-  border-color: var(--app-primary, #2f9fe8);
+  border-color: var(--app-primary, #2640DB);
 }
 
 .share-url-input {
@@ -349,10 +349,11 @@ const handleInstagram = async () => {
   height: 32px;
   border-radius: 8px;
   border: none;
-  background: var(--app-primary, #2f9fe8);
+  background: var(--app-primary, #2640DB);
   color: #ffffff;
   cursor: pointer;
   flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(38, 64, 219, 0.25);
   transition: transform 0.15s ease, background-color 0.2s ease;
 }
 

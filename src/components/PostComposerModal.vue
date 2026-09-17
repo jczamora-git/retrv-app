@@ -434,6 +434,7 @@ const handleClose = () => {
 }
 
 .header-post-btn:active:not(:disabled) {
+  background: var(--app-primary-deep);
   transform: scale(0.96);
 }
 

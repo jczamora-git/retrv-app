@@ -56,8 +56,8 @@ const initial = computed(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: var(--app-primary-soft, #DDF3FF);
-  color: var(--app-primary, #2F9FE8);
+  background-color: var(--app-primary-soft, rgba(38, 64, 219, 0.10));
+  color: var(--app-primary, #2640DB);
   border: 1px solid var(--app-border, rgba(20, 25, 30, 0.08));
   font-weight: 700;
   flex-shrink: 0;

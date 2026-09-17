@@ -293,21 +293,21 @@ const handleSelectConversation = (convId: string) => {
   margin-top: 12px;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 22px;
-  background: var(--ion-color-primary, #2F9FE8);
+  background: var(--app-primary, #2640DB);
   color: #ffffff;
   border: none;
   border-radius: 12px;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  transition: opacity 0.15s ease;
+  box-shadow: 0 4px 14px rgba(38, 64, 219, 0.22);
+  transition: opacity 0.15s ease, background 0.15s ease, transform 0.15s ease;
 }
 
 .retry-btn:active,
 .auth-btn:active {
-  opacity: 0.85;
+  background: var(--app-primary-deep, #0019B7);
+  transform: scale(0.98);
 }
 
 .btn-icon {

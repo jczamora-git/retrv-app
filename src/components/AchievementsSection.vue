@@ -149,8 +149,8 @@ const getTierIcon = (iconName: string) => {
 .merits-count-badge {
   font-size: 12px;
   font-weight: 600;
-  color: var(--app-primary, #2f9fe8);
-  background: var(--app-primary-soft, rgba(47, 159, 232, 0.12));
+  color: var(--app-primary, #2640DB);
+  background: var(--app-primary-soft, rgba(38, 64, 219, 0.10));
   padding: 2px 8px;
   border-radius: 10px;
 }
@@ -324,9 +324,9 @@ const getTierIcon = (iconName: string) => {
 }
 
 .badge-chip.unlocked {
-  background: var(--app-primary-soft, rgba(47, 159, 232, 0.1));
-  color: var(--app-primary, #2f9fe8);
-  border-color: rgba(47, 159, 232, 0.25);
+  background: var(--app-primary-soft, rgba(38, 64, 219, 0.10));
+  color: var(--app-primary, #2640DB);
+  border-color: rgba(38, 64, 219, 0.25);
   font-weight: 600;
 }
 

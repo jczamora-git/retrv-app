@@ -999,7 +999,7 @@ const deleteAlertButtons = [
 }
 
 .meta-val.status-val.open {
-  color: var(--app-primary, #2f9fe8);
+  color: var(--app-primary, #2640DB);
 }
 
 .meta-val.status-val.resolved {

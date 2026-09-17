@@ -4,13 +4,24 @@
   /* System Typography Stack */
   --ion-font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", system-ui, sans-serif;
 
-  /* Primary Blue Brand Accent */
-  --ion-color-primary: #2F9FE8;
-  --ion-color-primary-rgb: 47, 159, 232;
+  /* ----------------------------------------------------
+     OFFICIAL RETRV BRAND TOKENS
+     ---------------------------------------------------- */
+  --retrv-primary: #2640DB;
+  --retrv-primary-rgb: 38, 64, 219;
+  --retrv-primary-deep: #0019B7;
+  --retrv-primary-deep-rgb: 0, 25, 183;
+  --retrv-accent: #3B82F6;
+  --retrv-accent-rgb: 59, 130, 246;
+  --retrv-gradient: linear-gradient(135deg, #3B82F6 0%, #2640DB 50%, #0019B7 100%);
+
+  /* Ionic Primary Brand Accent */
+  --ion-color-primary: #2640DB;
+  --ion-color-primary-rgb: 38, 64, 219;
   --ion-color-primary-contrast: #ffffff;
   --ion-color-primary-contrast-rgb: 255, 255, 255;
-  --ion-color-primary-shade: #168CE2;
-  --ion-color-primary-tint: #47abec;
+  --ion-color-primary-shade: #0019B7;
+  --ion-color-primary-tint: #3B82F6;
 
   --ion-color-secondary: #5856d6;
   --ion-color-secondary-rgb: 88, 86, 214;
@@ -49,10 +60,12 @@
   --ion-background-color: #F7F8FA;
   --ion-text-color: #202124;
 
-  --app-primary: #2F9FE8;
-  --app-primary-deep: #168CE2;
-  --app-primary-soft: #DDF3FF;
-  --app-primary-subtle: #EFF8FE;
+  --app-primary: var(--retrv-primary);
+  --app-primary-deep: var(--retrv-primary-deep);
+  --app-primary-accent: var(--retrv-accent);
+  --app-primary-soft: rgba(38, 64, 219, 0.10);
+  --app-primary-subtle: rgba(38, 64, 219, 0.05);
+  --app-gradient: var(--retrv-gradient);
 
   --app-bg: #F7F8FA;
   --app-background: #F7F8FA;
@@ -79,16 +92,16 @@
   --app-dock-border: rgba(20, 25, 30, 0.08);
   --app-dock-shadow: 0 10px 32px rgba(0, 0, 0, 0.08);
 
-  /* Status Colors (Light) */
+  /* Status Colors (Light) - Preserve Lost (red) / Found (green), update Resolved to Retrv brand */
   --status-lost-bg: rgba(240, 68, 68, 0.12);
   --status-lost-text: #F04444;
   --status-found-bg: rgba(34, 181, 115, 0.14);
   --status-found-text: #22B573;
-  --status-resolved-bg: rgba(47, 159, 232, 0.14);
-  --status-resolved-text: #2F9FE8;
+  --status-resolved-bg: rgba(38, 64, 219, 0.12);
+  --status-resolved-text: #2640DB;
 
   /* Chat Tokens (Light) */
-  --chat-own-bubble: var(--app-primary);
+  --chat-own-bubble: #2640DB;
   --chat-own-text: #ffffff;
   --chat-other-bubble: var(--app-surface-secondary);
   --chat-other-text: var(--app-text-primary);
@@ -104,15 +117,17 @@
   --ion-background-color: #101214;
   --ion-text-color: #F5F7FA;
 
-  --ion-color-primary: #3AAAF0;
-  --ion-color-primary-rgb: 58, 170, 240;
-  --ion-color-primary-shade: #2F9FE8;
-  --ion-color-primary-tint: #5abaf3;
+  --ion-color-primary: #3B82F6;
+  --ion-color-primary-rgb: 59, 130, 246;
+  --ion-color-primary-shade: #2640DB;
+  --ion-color-primary-tint: #60a5fa;
 
-  --app-primary: #3AAAF0;
-  --app-primary-deep: #2F9FE8;
-  --app-primary-soft: rgba(58, 170, 240, 0.18);
-  --app-primary-subtle: rgba(58, 170, 240, 0.10);
+  --app-primary: #3B82F6;
+  --app-primary-deep: #2640DB;
+  --app-primary-accent: #60a5fa;
+  --app-primary-soft: rgba(59, 130, 246, 0.18);
+  --app-primary-subtle: rgba(59, 130, 246, 0.10);
+  --app-gradient: var(--retrv-gradient);
 
   --app-bg: #101214;
   --app-background: #101214;
@@ -144,11 +159,11 @@
   --status-lost-text: #FF6666;
   --status-found-bg: rgba(34, 181, 115, 0.20);
   --status-found-text: #34D399;
-  --status-resolved-bg: rgba(58, 170, 240, 0.20);
-  --status-resolved-text: #60BFF5;
+  --status-resolved-bg: rgba(59, 130, 246, 0.20);
+  --status-resolved-text: #60a5fa;
 
   /* Chat Tokens (Dark) */
-  --chat-own-bubble: var(--app-primary);
+  --chat-own-bubble: #2640DB;
   --chat-own-text: #ffffff;
   --chat-other-bubble: var(--app-surface-secondary);
   --chat-other-text: var(--app-text-primary);

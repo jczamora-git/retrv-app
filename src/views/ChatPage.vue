@@ -763,13 +763,13 @@ const handleOpenProfile = () => {
   align-items: center;
   gap: 8px;
   padding: 8px 14px;
-  background-color: rgba(47, 159, 232, 0.08);
+  background-color: var(--app-primary-soft, rgba(38, 64, 219, 0.08));
   border-radius: 10px;
   margin: 4px 0 12px;
   font-size: 11px;
-  color: var(--app-primary, #2f9fe8);
+  color: var(--app-primary, #2640DB);
   font-weight: 500;
-  border: 1px solid rgba(47, 159, 232, 0.15);
+  border: 1px solid rgba(38, 64, 219, 0.15);
   flex-shrink: 0;
 }
 
@@ -972,7 +972,7 @@ const handleOpenProfile = () => {
 }
 
 .thread-reply-shortcut-btn:hover {
-  background-color: rgba(47, 159, 232, 0.1);
+  background-color: var(--app-primary-soft, rgba(38, 64, 219, 0.10));
 }
 
 .post-chevron {

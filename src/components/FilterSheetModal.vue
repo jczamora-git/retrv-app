@@ -390,7 +390,7 @@ const handleApply = () => {
 .filter-chip.active {
   background: var(--app-primary-soft);
   color: var(--app-primary);
-  border-color: rgba(47, 159, 232, 0.4);
+  border-color: rgba(38, 64, 219, 0.4);
   font-weight: 600;
 }
 
@@ -460,10 +460,12 @@ const handleApply = () => {
   justify-content: center;
   gap: 8px;
   cursor: pointer;
-  transition: opacity 0.15s ease, transform 0.15s ease;
+  box-shadow: 0 4px 14px rgba(38, 64, 219, 0.25);
+  transition: opacity 0.15s ease, transform 0.15s ease, background-color 0.15s ease;
 }
 
 .apply-filters-btn:active {
+  background: var(--app-primary-deep);
   transform: scale(0.99);
 }
 

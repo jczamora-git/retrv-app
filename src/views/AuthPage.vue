@@ -766,8 +766,8 @@ const handleCreateAccount = async () => {
 }
 
 .auth-input:focus {
-  border-color: var(--ion-color-primary, #2F9FE8);
-  box-shadow: 0 0 0 3px rgba(47, 159, 232, 0.16);
+  border-color: var(--app-primary, #2640DB);
+  box-shadow: 0 0 0 3px rgba(38, 64, 219, 0.16);
 }
 
 .auth-input::placeholder {
@@ -874,21 +874,22 @@ const handleCreateAccount = async () => {
   width: 100%;
   height: 48px;
   margin-top: 8px;
-  background: var(--ion-color-primary, #2F9FE8);
+  background: var(--app-primary, #2640DB);
   color: #ffffff;
   border: none;
   border-radius: 12px;
   font-size: 15px;
   font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 4px 14px rgba(47, 159, 232, 0.25);
-  transition: transform 0.15s ease, opacity 0.15s ease, box-shadow 0.15s ease;
+  box-shadow: 0 4px 14px rgba(38, 64, 219, 0.25);
+  transition: transform 0.15s ease, opacity 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
   touch-action: manipulation;
 }
 
 .auth-primary-btn:active:not(:disabled) {
   transform: scale(0.98);
-  box-shadow: 0 2px 8px rgba(47, 159, 232, 0.2);
+  background: var(--app-primary-deep, #0019B7);
+  box-shadow: 0 2px 8px rgba(0, 25, 183, 0.3);
 }
 
 .auth-primary-btn:disabled {
@@ -919,7 +920,7 @@ const handleCreateAccount = async () => {
   padding: 0;
   font-size: 13.5px;
   font-weight: 600;
-  color: var(--ion-color-primary, #2F9FE8);
+  color: var(--app-primary-accent, #3B82F6);
   cursor: pointer;
   transition: opacity 0.15s ease;
 }

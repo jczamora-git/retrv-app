@@ -760,9 +760,9 @@ const handleDirectCreate = async (data: PostFormData) => {
 }
 
 .compact-filter-pill.active {
-  background: var(--app-primary-soft, #DDF3FF);
-  color: var(--app-primary, #2F9FE8);
-  border-color: rgba(47, 159, 232, 0.35);
+  background: var(--app-primary-soft, rgba(38, 64, 219, 0.10));
+  color: var(--app-primary, #2640DB);
+  border-color: rgba(38, 64, 219, 0.35);
   font-weight: 600;
 }
 
@@ -885,7 +885,7 @@ const handleDirectCreate = async (data: PostFormData) => {
   background: var(--app-primary);
   color: #ffffff;
   border: none;
-  box-shadow: 0 4px 14px rgba(47, 159, 232, 0.3);
+  box-shadow: 0 4px 14px rgba(38, 64, 219, 0.3);
 }
 
 /* Error Box */

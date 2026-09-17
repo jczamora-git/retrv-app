@@ -411,7 +411,7 @@ defineExpose({
 
 .attach-img-btn:hover {
   color: var(--app-primary);
-  background-color: rgba(47, 159, 232, 0.08);
+  background-color: var(--app-primary-soft, rgba(38, 64, 219, 0.08));
 }
 
 .attach-img-btn:disabled {

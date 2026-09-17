@@ -459,7 +459,7 @@ const handleSave = async () => {
 .ios-input:focus {
   border-color: var(--app-primary);
   background: var(--app-surface);
-  box-shadow: 0 0 0 3px rgba(47, 159, 232, 0.12);
+  box-shadow: 0 0 0 3px rgba(38, 64, 219, 0.12);
 }
 
 .input-with-prefix {

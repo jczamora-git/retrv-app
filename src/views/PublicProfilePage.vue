@@ -370,7 +370,7 @@ const handleMessageUser = async () => {
 .profile-cover-fallback {
   position: absolute;
   inset: 0;
-  background: linear-gradient(135deg, #0284c7 0%, #0369a1 40%, #0f172a 100%);
+  background: var(--app-gradient, linear-gradient(135deg, #3B82F6 0%, #2640DB 50%, #0019B7 100%));
 }
 
 .profile-cover-overlay {
@@ -593,7 +593,7 @@ const handleMessageUser = async () => {
 .category-pill-btn.active {
   background: var(--app-primary-soft);
   color: var(--app-primary);
-  border-color: rgba(47, 159, 232, 0.35);
+  border-color: rgba(38, 64, 219, 0.35);
   font-weight: 600;
 }
 

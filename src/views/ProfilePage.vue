@@ -358,7 +358,7 @@ const handleCreate = async (data: PostFormData) => {
 .profile-cover-fallback {
   position: absolute;
   inset: 0;
-  background: linear-gradient(135deg, #0284c7 0%, #0369a1 40%, #0f172a 100%);
+  background: var(--app-gradient, linear-gradient(135deg, #3B82F6 0%, #2640DB 50%, #0019B7 100%));
 }
 
 .profile-cover-overlay {
@@ -456,7 +456,7 @@ const handleCreate = async (data: PostFormData) => {
 }
 
 .text-resolved {
-  color: var(--app-resolved, #3b82f6);
+  color: var(--status-resolved-text, #2640DB);
 }
 
 .stat-label {
@@ -633,7 +633,7 @@ const handleCreate = async (data: PostFormData) => {
 .category-pill-btn.active {
   background: var(--app-primary-soft);
   color: var(--app-primary);
-  border-color: rgba(47, 159, 232, 0.35);
+  border-color: rgba(38, 64, 219, 0.35);
   font-weight: 600;
 }
 
@@ -702,7 +702,7 @@ const handleCreate = async (data: PostFormData) => {
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(47, 159, 232, 0.25);
+  box-shadow: 0 2px 8px rgba(38, 64, 219, 0.25);
   transition: all 0.15s ease;
 }
 

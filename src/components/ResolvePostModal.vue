@@ -363,8 +363,8 @@ const handleConfirm = () => {
 
 /* Selected Member Box */
 .selected-member-card {
-  background: var(--app-primary-soft, #ddf3ff);
-  border: 1px solid rgba(47, 159, 232, 0.3);
+  background: var(--app-primary-soft, rgba(38, 64, 219, 0.10));
+  border: 1px solid rgba(38, 64, 219, 0.3);
   border-radius: 16px;
   padding: 14px 16px;
   display: flex;
@@ -376,7 +376,7 @@ const handleConfirm = () => {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: var(--app-primary, #2f9fe8);
+  color: var(--app-primary, #2640DB);
   font-size: 12px;
   font-weight: 700;
 }
@@ -539,8 +539,8 @@ const handleConfirm = () => {
 .candidate-badge {
   font-size: 11px;
   font-weight: 600;
-  color: var(--app-primary, #2f9fe8);
-  background: var(--app-primary-soft, #ddf3ff);
+  color: var(--app-primary, #2640DB);
+  background: var(--app-primary-soft, rgba(38, 64, 219, 0.10));
   padding: 2px 6px;
   border-radius: 6px;
 }
@@ -575,14 +575,14 @@ const handleConfirm = () => {
 }
 
 .radio-circle.checked {
-  border-color: var(--app-primary, #2f9fe8);
+  border-color: var(--app-primary, #2640DB);
 }
 
 .radio-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background-color: var(--app-primary, #2f9fe8);
+  background-color: var(--app-primary, #2640DB);
 }
 
 /* Footer Buttons */
@@ -610,7 +610,7 @@ const handleConfirm = () => {
   flex: 2;
   height: 46px;
   border-radius: 12px;
-  background: var(--app-primary, #2f9fe8);
+  background: var(--app-primary, #2640DB);
   border: none;
   color: #ffffff;
   font-size: 14px;
@@ -619,11 +619,13 @@ const handleConfirm = () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background-color 0.15s ease;
+  box-shadow: 0 4px 14px rgba(38, 64, 219, 0.25);
+  transition: background-color 0.15s ease, transform 0.15s ease;
 }
 
-.confirm-resolve-btn:hover {
-  background: var(--app-primary-deep, #0e4a9e);
+.confirm-resolve-btn:active:not(:disabled) {
+  background: var(--app-primary-deep, #0019B7);
+  transform: scale(0.98);
 }
 
 .confirm-resolve-btn:disabled,

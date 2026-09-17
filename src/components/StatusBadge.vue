@@ -86,8 +86,8 @@ defineProps<{
 }
 
 .status-resolved {
-  background: var(--status-resolved-bg, rgba(47, 159, 232, 0.14));
-  color: var(--status-resolved-text, #2F9FE8);
+  background: var(--status-resolved-bg, rgba(38, 64, 219, 0.12));
+  color: var(--status-resolved-text, #2640DB);
 }
 
 .status-returned {

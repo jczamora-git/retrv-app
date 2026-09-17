@@ -294,7 +294,7 @@ const handleSubmit = async () => {
 .ios-input:focus {
   border-color: var(--app-primary);
   background: var(--app-surface);
-  box-shadow: 0 0 0 3px rgba(47, 159, 232, 0.12);
+  box-shadow: 0 0 0 3px rgba(38, 64, 219, 0.12);
 }
 
 .input-with-prefix {
@@ -353,7 +353,7 @@ const handleSubmit = async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 14px rgba(47, 159, 232, 0.25);
+  box-shadow: 0 4px 14px rgba(38, 64, 219, 0.25);
   transition: transform 0.15s ease, opacity 0.15s ease, background 0.15s ease;
   margin-top: 6px;
 }

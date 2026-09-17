@@ -201,7 +201,7 @@ const handleClickNotification = async (item: AppNotification) => {
 .mark-all-read-btn {
   background: transparent;
   border: none;
-  color: var(--app-primary, #2f9fe8);
+  color: var(--app-primary, #2640DB);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
@@ -310,7 +310,7 @@ const handleClickNotification = async (item: AppNotification) => {
 }
 
 .notif-row.unread {
-  background-color: rgba(47, 159, 232, 0.05);
+  background-color: var(--app-primary-subtle, rgba(38, 64, 219, 0.05));
 }
 
 .notif-avatar-wrap {
@@ -326,7 +326,7 @@ const handleClickNotification = async (item: AppNotification) => {
   width: 9px;
   height: 9px;
   border-radius: 50%;
-  background-color: var(--app-primary, #2f9fe8);
+  background-color: var(--app-primary, #2640DB);
   border: 1.5px solid var(--app-surface, #ffffff);
 }
 
@@ -354,7 +354,7 @@ const handleClickNotification = async (item: AppNotification) => {
 }
 
 .merit-text {
-  color: var(--app-primary, #2f9fe8);
+  color: var(--app-primary, #2640DB);
   font-weight: 600;
 }
 

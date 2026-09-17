@@ -394,7 +394,12 @@ const handleSave = async () => {
   justify-content: center;
   min-width: 60px;
   min-height: 34px;
-  transition: opacity 0.15s ease;
+  box-shadow: 0 2px 8px rgba(38, 64, 219, 0.25);
+  transition: opacity 0.15s ease, background 0.15s ease;
+}
+
+.header-save-btn:active:not(:disabled) {
+  background: var(--app-primary-deep);
 }
 
 .header-save-btn:disabled {

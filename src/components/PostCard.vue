@@ -423,10 +423,10 @@ const handleCommentClick = () => {
   align-items: center;
   gap: 5px;
   padding: 4px 8px;
-  background: var(--app-primary-soft, #ddf3ff);
+  background: var(--app-primary-soft, rgba(38, 64, 219, 0.10));
   border-radius: 8px;
   font-size: 12px;
-  color: var(--app-primary, #2f9fe8);
+  color: var(--app-primary, #2640DB);
   cursor: pointer;
   width: fit-content;
   transition: opacity 0.15s ease;

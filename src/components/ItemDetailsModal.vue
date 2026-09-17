@@ -549,7 +549,7 @@ const confirmDelete = async () => {
 .ios-primary-btn {
   background: var(--ion-color-primary);
   color: #ffffff;
-  box-shadow: 0 4px 14px rgba(0, 122, 255, 0.3);
+  box-shadow: 0 4px 14px rgba(38, 64, 219, 0.25);
 }
 
 .ios-primary-btn.btn-claimed-state {

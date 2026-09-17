@@ -149,11 +149,11 @@ const badgeAriaLabel = computed(() => {
   border: 1px solid rgba(16, 185, 129, 0.28);
 }
 
-/* Tier 3: Trusted Finder (5+ merits) - Premium Electric Blue Verified Accent */
+/* Tier 3: Trusted Finder (5+ merits) - Retrv Brand Blue Verified Accent */
 .tier-tier3 {
-  color: #0284c7;
-  background: rgba(2, 132, 199, 0.12);
-  border: 1px solid rgba(2, 132, 199, 0.32);
+  color: var(--app-primary, #2640DB);
+  background: var(--app-primary-soft, rgba(38, 64, 219, 0.12));
+  border: 1px solid rgba(38, 64, 219, 0.32);
 }
 
 /* Tier 4: Community Hero (10+ merits) - Glorious Royal Gold Verified Accent */

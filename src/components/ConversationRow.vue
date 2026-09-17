@@ -91,7 +91,7 @@ const postThreadTitle = computed(() => {
 <style scoped>
 .thread-title-prefix {
   font-weight: 600;
-  color: var(--app-primary, #2f9fe8);
+  color: var(--app-primary, #2640DB);
 }
 
 .conversation-row {
@@ -113,7 +113,7 @@ const postThreadTitle = computed(() => {
 }
 
 .conversation-row.unread {
-  background-color: rgba(47, 159, 232, 0.04);
+  background-color: var(--app-primary-subtle, rgba(38, 64, 219, 0.04));
 }
 
 .row-avatar-wrap {
@@ -128,7 +128,7 @@ const postThreadTitle = computed(() => {
   width: 9px;
   height: 9px;
   border-radius: 50%;
-  background-color: var(--app-primary, #2f9fe8);
+  background-color: var(--app-primary, #2640DB);
   border: 1.5px solid var(--app-surface, #ffffff);
 }
 
@@ -175,7 +175,7 @@ const postThreadTitle = computed(() => {
   height: 18px;
   padding: 0 5px;
   border-radius: 9px;
-  background-color: var(--app-primary, #2f9fe8);
+  background-color: var(--app-primary-accent, #3B82F6);
   color: #ffffff;
   font-size: 11px;
   font-weight: 700;

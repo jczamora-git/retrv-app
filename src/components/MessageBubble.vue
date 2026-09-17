@@ -175,7 +175,7 @@ const formattedTime = computed(() => {
 }
 
 .own-bubble {
-  background-color: var(--app-primary, #2f9fe8);
+  background-color: var(--chat-own-bubble, #2640DB);
   color: #ffffff;
   border-bottom-right-radius: 4px;
 }
