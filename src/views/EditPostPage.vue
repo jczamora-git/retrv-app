@@ -15,7 +15,7 @@
       </template>
     </PageHeader>
 
-    <ion-content :fullscreen="true" class="edit-post-content">
+    <ion-content :fullscreen="false" :force-overscroll="false" class="edit-post-content">
       <div v-if="loading" class="loading-wrap">
         <ion-spinner name="crescent" />
         <span>Loading post...</span>

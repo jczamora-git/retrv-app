@@ -36,19 +36,17 @@
       </template>
     </PageHeader>
 
-    <ion-content :fullscreen="true" class="chat-content">
+    <ion-content ref="contentRef" :fullscreen="false" :force-overscroll="false" class="chat-content">
       <ion-refresher slot="fixed" @ion-refresh="handleIonRefresh">
         <ion-refresher-content pulling-icon="arrow-down" refreshing-spinner="crescent" />
       </ion-refresher>
 
       <div class="chat-view-container">
-        <!-- Message History Timeline Stream -->
-        <div ref="scrollContainerRef" class="chat-messages-scroll">
-          <!-- Public Meetup Safety Note (Top only once) -->
-          <div class="safety-tip-bar">
-            <ShieldAlert :size="15" class="safety-icon" />
-            <span>For item exchanges, consider meeting in a public place.</span>
-          </div>
+        <!-- Public Meetup Safety Note (Top only once) -->
+        <div class="safety-tip-bar">
+          <ShieldAlert :size="15" class="safety-icon" />
+          <span>For item exchanges, consider meeting in a public place.</span>
+        </div>
 
           <!-- 1. SKELETON LOADING STATE -->
           <div v-if="isMessagesLoading" class="chat-skeleton-stream" aria-label="Loading messages">
@@ -216,12 +214,15 @@
               {{ otherParticipant?.name || 'User' }} is typing...
             </span>
           </div>
-        </div>
 
         <!-- Temporary Android Upload Diagnostics (Shown only on failure) -->
         <UploadDebugBanner />
+      </div>
+    </ion-content>
 
-        <!-- Sticky Composer with Reply Banner & Image Attachment Support -->
+    <ion-footer class="ion-no-border chat-footer">
+      <div class="chat-footer-inner">
+        <!-- Fixed Composer with Reply Banner & Image Attachment Support -->
         <ChatComposer
           ref="composerRef"
           :sending="sending"
@@ -231,7 +232,7 @@
           @clear-reply="handleClearReply"
         />
       </div>
-    </ion-content>
+    </ion-footer>
 
     <!-- Fullscreen Image Viewer Modal for Thread Replies -->
     <Teleport to="body">
@@ -269,6 +270,7 @@ import { useRoute, useRouter } from 'vue-router';
 import {
   IonPage,
   IonContent,
+  IonFooter,
   IonRefresher,
   IonRefresherContent,
   IonSkeletonText,
@@ -287,7 +289,6 @@ import { useAuth, currentAppUserId, sessionUid } from '../composables/useAuth';
 import { useProfiles } from '../composables/useProfiles';
 import { usePosts } from '../composables/usePosts';
 import { useImageUpload } from '../composables/useImageUpload';
-import { getChatServerUrl } from '../services/socket';
 import { supabase } from '../utils/supabase';
 import type { Post } from '../types/post';
 import type { Profile } from '../types/profile';
@@ -335,7 +336,7 @@ const {
 
 const otherParticipant = ref<Profile | null>(null);
 const sending = ref(false);
-const scrollContainerRef = ref<HTMLDivElement | null>(null);
+const contentRef = ref<any>(null);
 const composerRef = ref<InstanceType<typeof ChatComposer> | null>(null);
 
 // Active composer context & Post metadata cache
@@ -473,28 +474,25 @@ const formatMessageTime = (createdAt?: number) => {
 
 const scrollToBottom = (smooth = true) => {
   nextTick(() => {
-    if (scrollContainerRef.value) {
-      scrollContainerRef.value.scrollTo({
-        top: scrollContainerRef.value.scrollHeight,
-        behavior: smooth ? 'smooth' : 'auto'
-      });
+    if (contentRef.value) {
+      if (typeof contentRef.value.scrollToBottom === 'function') {
+        contentRef.value.scrollToBottom(smooth ? 300 : 0);
+      } else if (contentRef.value.$el && typeof contentRef.value.$el.scrollToBottom === 'function') {
+        contentRef.value.$el.scrollToBottom(smooth ? 300 : 0);
+      }
     }
   });
 };
 
 const isNearBottom = (): boolean => {
-  if (!scrollContainerRef.value) return true;
-  const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.value;
-  return scrollHeight - scrollTop - clientHeight < 150;
+  return true;
 };
 
-// Auto-scroll when new realtime messages arrive (if already near bottom)
+// Auto-scroll when new realtime messages arrive
 watch(
   () => messages.value.length,
   () => {
-    if (isNearBottom()) {
-      scrollToBottom(true);
-    }
+    scrollToBottom(true);
   }
 );
 
@@ -730,9 +728,23 @@ const handleOpenProfile = () => {
 .chat-view-container {
   display: flex;
   flex-direction: column;
-  height: 100%;
   max-width: var(--max-content-width, 600px);
+  width: 100%;
   margin: 0 auto;
+  padding: 8px 16px 20px;
+  box-sizing: border-box;
+}
+
+.chat-footer {
+  background: var(--app-bg);
+  --background: var(--app-bg);
+}
+
+.chat-footer-inner {
+  max-width: var(--max-content-width, 600px);
+  width: 100%;
+  margin: 0 auto;
+  box-sizing: border-box;
 }
 
 .header-icon-btn {
@@ -775,16 +787,6 @@ const handleOpenProfile = () => {
 
 .safety-icon {
   flex-shrink: 0;
-}
-
-/* Message Scroll Area */
-.chat-messages-scroll {
-  flex: 1;
-  overflow-y: auto;
-  padding: 8px 16px 16px;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
 }
 
 /* Chat Message Skeleton Stream */

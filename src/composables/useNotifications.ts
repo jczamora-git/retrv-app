@@ -2,6 +2,7 @@ import { ref, computed } from 'vue';
 import { supabase } from '../utils/supabase';
 import { useAuth, sessionUid, getSessionUser } from './useAuth';
 import type { AppNotification } from '../types/notification';
+import { shouldSendNotification } from './useNotificationPreferences';
 
 const notifications = ref<AppNotification[]>([]);
 const loading = ref(false);
@@ -123,6 +124,10 @@ export function useNotifications() {
     const currentUid = session?.uid || currentProfile.value?.id;
     if (!currentUid || params.postAuthorId === currentUid) return;
 
+    // Honor recipient notification preferences
+    const allowed = await shouldSendNotification(params.postAuthorId, 'comments');
+    if (!allowed) return;
+
     const notifId = `notif_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const newRecord = {
       id: notifId,
@@ -152,6 +157,10 @@ export function useNotifications() {
     const currentUid = session?.uid || currentProfile.value?.id;
     if (!currentUid || params.targetAuthorId === currentUid) return;
 
+    // Honor recipient notification preferences
+    const allowed = await shouldSendNotification(params.targetAuthorId, 'replies');
+    if (!allowed) return;
+
     const notifId = `notif_reply_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const newRecord = {
       id: notifId,
@@ -179,6 +188,10 @@ export function useNotifications() {
     const session = await getSessionUser();
     const currentUid = session?.uid || currentProfile.value?.id;
     if (!currentUid || params.recipientId === currentUid) return;
+
+    // Honor recipient notification preferences
+    const allowed = await shouldSendNotification(params.recipientId, 'merits');
+    if (!allowed) return;
 
     const notifId = `notif_merit_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const newRecord = {

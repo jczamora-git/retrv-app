@@ -156,3 +156,11 @@ Post is marked Resolved
         ↓
 Helper may receive Community Merit
 ```
+
+## Legal
+
+- [Privacy Policy](policies/privacy-policy.md)
+- [Terms of Use](policies/terms-of-use.md)
+- [Community Guidelines](policies/community-guidelines.md)
+
+Canonical policy documents are maintained in the [`policies/`](policies/) directory.

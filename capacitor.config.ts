@@ -1,7 +1,7 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.example.ioniclostandfound',
+  appId: 'com.jc.retrv',
   appName: 'Retrv',
   webDir: 'dist'
 };

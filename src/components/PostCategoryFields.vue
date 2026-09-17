@@ -1,13 +1,13 @@
 <template>
   <div class="category-fields-wrap">
-    <!-- Category Row -->
+    <!-- Single Compact Category Row on Form -->
     <button
       type="button"
       class="picker-row-btn"
       :disabled="disabled || isChecking"
       :aria-invalid="Boolean(error)"
       aria-haspopup="dialog"
-      @click="activePicker = 'category'"
+      @click="openCategoryPicker"
     >
       <div class="row-left">
         <Tag :size="16" class="row-icon" />
@@ -15,189 +15,221 @@
       </div>
       <div class="row-right">
         <span class="row-value" :class="{ placeholder: !category }">
-          {{ selectedCategoryLabel || 'Choose category' }}
+          {{ displayCategorySummary || 'Choose category' }}
         </span>
         <ChevronRight :size="16" class="row-chevron" />
       </div>
     </button>
     <p v-if="error" class="field-error" role="alert">{{ error }}</p>
 
-    <!-- Subcategory Row -->
-    <button
-      type="button"
-      class="picker-row-btn"
-      :disabled="!category || disabled || isChecking"
-      aria-haspopup="dialog"
-      @click="activePicker = 'subcategory'"
-    >
-      <div class="row-left">
-        <ListFilter :size="16" class="row-icon" />
-        <span class="row-label">Subcategory</span>
-      </div>
-      <div class="row-right">
-        <span class="row-value" :class="{ placeholder: !subCategory }">
-          {{ selectedSubcategoryLabel || (category ? 'None (optional)' : 'Choose category first') }}
-        </span>
-        <ChevronRight :size="16" class="row-chevron" />
-      </div>
-    </button>
-
-    <!-- Category / Subcategory Sheet Modal -->
+    <!-- Centered / Mobile Compact Category Picker Modal -->
     <ion-modal
-      :is-open="activePicker !== null"
-      :breakpoints="[0, 0.72, 0.95]"
-      :initial-breakpoint="0.72"
-      :expand-to-scroll="false"
-      class="category-picker-modal"
-      aria-label="Choose a category or subcategory"
+      :is-open="isPickerOpen"
+      class="compact-category-modal"
+      aria-label="Choose a category"
       @did-dismiss="handlePickerDismiss"
     >
-      <div class="choice-sheet">
-        <header class="choice-header">
-          <div class="header-titles">
-            <h2 class="choice-title">
-              {{ activePicker === 'category' ? 'Select Category' : 'Select Subcategory' }}
-            </h2>
-            <span class="choice-subtitle">
-              {{ activePicker === 'category' ? categoryOptions.length : subcategoryOptions.length }} options &bull; Scroll to view all
-            </span>
+      <div class="picker-card-content">
+        <!-- STEP 1: SELECT CATEGORY HEADER -->
+        <header v-if="currentStep === 'category'" class="picker-header">
+          <div class="header-top-row">
+            <h2 class="picker-title">Select Category</h2>
+            <button
+              type="button"
+              class="modal-close-btn"
+              aria-label="Close"
+              @click="isPickerOpen = false"
+            >
+              <X :size="20" />
+            </button>
           </div>
-          <button
-            type="button"
-            class="close-sheet-btn"
-            aria-label="Close selection"
-            @click="activePicker = null"
-          >
-            <X :size="20" />
-          </button>
+
+          <!-- Instant Search Box -->
+          <div class="search-input-wrap">
+            <Search :size="16" class="search-icon" />
+            <input
+              v-model="searchQuery"
+              type="text"
+              class="search-input"
+              placeholder="Search categories..."
+              aria-label="Search categories"
+            />
+            <button
+              v-if="searchQuery"
+              type="button"
+              class="clear-search-btn"
+              aria-label="Clear search"
+              @click="searchQuery = ''"
+            >
+              <X :size="14" />
+            </button>
+          </div>
         </header>
 
-        <div class="choice-list-wrapper">
-          <div
-            ref="choiceListEl"
-            class="choice-list"
-            role="group"
-            :aria-label="activePicker === 'category' ? 'Categories' : 'Subcategories'"
-            @scroll="onChoiceListScroll"
-          >
-          <!-- Subcategory: None (optional) -->
-          <button
-            v-if="activePicker === 'subcategory'"
-            type="button"
-            class="choice-row"
-            :class="{ active: !subCategory }"
-            :aria-pressed="!subCategory"
-            @click="changeSubcategory('')"
-          >
-            <span class="choice-text">
-              None <span class="optional-label">(optional)</span>
-            </span>
-            <Check v-if="!subCategory" :size="18" class="choice-check" />
-          </button>
-
-          <!-- List of Options -->
-          <button
-            v-for="option in activePicker === 'category' ? categoryOptions : subcategoryOptions"
-            :key="option.value"
-            type="button"
-            class="choice-row"
-            :class="{ active: option.value === (activePicker === 'category' ? category : subCategory) }"
-            :aria-pressed="option.value === (activePicker === 'category' ? category : subCategory)"
-            @click="activePicker === 'category' ? changeCategory(option.value) : changeSubcategory(option.value)"
-          >
-            <span class="choice-text">{{ option.label }}</span>
-            <Check
-              v-if="option.value === (activePicker === 'category' ? category : subCategory)"
-              :size="18"
-              class="choice-check"
-            />
-          </button>
-
-          <!-- Add Custom Subcategory Option in Subcategory Sheet -->
-          <div v-if="activePicker === 'subcategory'" class="custom-subcategory-section">
+        <!-- STEP 2: SELECT SUBCATEGORY HEADER -->
+        <header v-else class="picker-header subcat-header">
+          <div class="header-top-row">
             <button
-              v-if="!showCustomInput"
               type="button"
-              class="add-custom-btn"
-              :disabled="!isKnownCategory || disabled || isChecking"
-              @click="showCustomInput = true"
+              class="back-to-categories-btn"
+              aria-label="Back to categories"
+              @click="goBackToCategories"
             >
-              <Plus :size="16" />
-              <span>+ Add custom subcategory</span>
+              <ArrowLeft :size="18" />
+              <span class="active-category-title">{{ activeCategoryName }}</span>
             </button>
+            <button
+              type="button"
+              class="modal-close-btn"
+              aria-label="Close"
+              @click="isPickerOpen = false"
+            >
+              <X :size="20" />
+            </button>
+          </div>
+          <p class="subcat-subtitle">Select a subcategory or choose none</p>
+        </header>
 
-            <div v-else class="custom-entry-box">
-              <div class="custom-input-row">
-                <input
-                  v-model="customName"
-                  type="text"
-                  aria-label="Custom subcategory name"
-                  placeholder="e.g. momo"
-                  maxlength="80"
-                  :disabled="disabled || isChecking"
-                  :aria-invalid="Boolean(customError)"
-                  @keydown.enter.prevent="addCustomSubcategory"
+        <!-- MODAL BODY -->
+        <div class="picker-body">
+          <!-- VIEW 1: 2-COLUMN CATEGORY GRID -->
+          <div v-if="currentStep === 'category'" class="categories-view">
+            <div v-if="filteredCategories.length === 0" class="empty-search-state">
+              <p class="empty-text">No categories found</p>
+            </div>
+
+            <div v-else class="category-grid">
+              <button
+                v-for="cat in filteredCategories"
+                :key="cat.key"
+                type="button"
+                class="category-tile"
+                :class="{ selected: isCategorySelected(cat.name) }"
+                @click="onSelectMainCategory(cat)"
+              >
+                <div class="tile-icon-box">
+                  <component :is="getCategoryIcon(cat.key)" :size="22" class="tile-icon" />
+                </div>
+                <span class="tile-name">{{ cat.name }}</span>
+                <Check
+                  v-if="isCategorySelected(cat.name)"
+                  :size="14"
+                  class="tile-selected-badge"
                 />
-                <button
-                  type="button"
-                  class="save-custom-btn"
-                  :disabled="!customName.trim() || disabled || isChecking"
-                  @click="addCustomSubcategory"
-                >
-                  <LoaderCircle v-if="isChecking" :size="15" class="checking-spinner" />
-                  <span v-else>Add</span>
-                </button>
-                <button
-                  type="button"
-                  class="cancel-custom-btn"
-                  aria-label="Cancel custom subcategory"
-                  :disabled="disabled || isChecking"
-                  @click="resetCustomInput"
-                >
-                  <X :size="16" />
-                </button>
-              </div>
-              <p v-if="customError" class="field-error" role="alert">{{ customError }}</p>
+              </button>
             </div>
           </div>
 
-          <!-- Subtle End of List marker -->
-          <div class="list-end-hint">
-            <span class="end-dot"></span>
-            <span>All {{ activePicker === 'category' ? 'categories' : 'subcategories' }} loaded</span>
+          <!-- VIEW 2: 2-COLUMN SUBCATEGORY CHIPS -->
+          <div v-else class="subcategories-view">
+            <div class="subcategory-grid">
+              <!-- Option: None (optional) -->
+              <button
+                type="button"
+                class="subcat-chip"
+                :class="{ selected: !subCategory }"
+                @click="onSelectSubcategory('')"
+              >
+                <span class="subcat-name">None (optional)</span>
+                <Check v-if="!subCategory" :size="14" class="chip-check" />
+              </button>
+
+              <!-- Available Subcategories -->
+              <button
+                v-for="sub in currentSubcategoryList"
+                :key="sub"
+                type="button"
+                class="subcat-chip"
+                :class="{ selected: isSubcategorySelected(sub) }"
+                @click="onSelectSubcategory(sub)"
+              >
+                <span class="subcat-name">{{ sub }}</span>
+                <Check v-if="isSubcategorySelected(sub)" :size="14" class="chip-check" />
+              </button>
+            </div>
+
+            <!-- Custom Subcategory Option -->
+            <div class="custom-subcategory-wrap">
+              <button
+                v-if="!showCustomInput"
+                type="button"
+                class="add-custom-link-btn"
+                :disabled="disabled || isChecking"
+                @click="showCustomInput = true"
+              >
+                <Plus :size="16" />
+                <span>+ Add custom subcategory</span>
+              </button>
+
+              <div v-else class="custom-entry-box">
+                <div class="custom-input-row">
+                  <input
+                    v-model="customName"
+                    type="text"
+                    aria-label="Custom subcategory name"
+                    placeholder="e.g. momo"
+                    maxlength="80"
+                    :disabled="disabled || isChecking"
+                    :aria-invalid="Boolean(customError)"
+                    @keydown.enter.prevent="addCustomSubcategory"
+                  />
+                  <button
+                    type="button"
+                    class="save-custom-btn"
+                    :disabled="!customName.trim() || disabled || isChecking"
+                    @click="addCustomSubcategory"
+                  >
+                    <LoaderCircle v-if="isChecking" :size="15" class="checking-spinner" />
+                    <span v-else>Add</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="cancel-custom-btn"
+                    aria-label="Cancel custom subcategory"
+                    :disabled="disabled || isChecking"
+                    @click="resetCustomInput"
+                  >
+                    <X :size="16" />
+                  </button>
+                </div>
+                <p v-if="customError" class="field-error" role="alert">{{ customError }}</p>
+              </div>
+            </div>
           </div>
         </div>
-
-        <!-- Floating Scroll Hint with Gradient Fade -->
-        <transition name="fade-hint">
-          <div v-if="canScrollMore" class="scroll-more-overlay" @click="scrollDownList">
-            <button type="button" class="scroll-more-pill" aria-label="Scroll down for more items">
-              <span>More below</span>
-              <ChevronDown :size="14" class="bounce-icon" />
-            </button>
-          </div>
-        </transition>
       </div>
-    </div>
-  </ion-modal>
-</div>
+    </ion-modal>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onUnmounted, ref, watch } from "vue";
+import { computed, onUnmounted, ref, watch } from "vue";
 import { IonModal } from "@ionic/vue";
 import {
+  ArrowLeft,
   Check,
-  ChevronDown,
   ChevronRight,
-  ListFilter,
+  FileText,
+  Footprints,
+  Gamepad2,
+  Gem,
+  GraduationCap,
+  KeyRound,
   LoaderCircle,
+  Package,
+  PawPrint,
   Plus,
+  Search,
+  Shirt,
+  ShoppingBag,
+  Smartphone,
   Tag,
+  Users,
+  Wallet,
   X
 } from "lucide-vue-next";
 import { useCategories } from "../composables/useCategories";
-import { getCategoryConfig } from "../config/categories";
+import { CategoryConfig, getCategoryConfig } from "../config/categories";
 
 interface PendingSubcategory {
   category: string;
@@ -233,9 +265,33 @@ const {
   normalizeCategoryKey
 } = useCategories();
 
-const activePicker = ref<"category" | "subcategory" | null>(null);
-const choiceListEl = ref<HTMLElement | null>(null);
-const canScrollMore = ref(false);
+// Category Icon Mapping
+const iconMap: Record<string, any> = {
+  pets: PawPrint,
+  accessories: Gem,
+  bags: ShoppingBag,
+  people: Users,
+  gadgets: Smartphone,
+  walletsandcards: Wallet,
+  keys: KeyRound,
+  documentsandids: FileText,
+  clothing: Shirt,
+  footwear: Footprints,
+  schoolandoffice: GraduationCap,
+  toys: Gamepad2,
+  other: Package
+};
+
+const getCategoryIcon = (keyOrName: string) => {
+  const norm = normalizeCategoryKey(keyOrName);
+  return iconMap[norm] || Package;
+};
+
+// Modal and Navigation State
+const isPickerOpen = ref(false);
+const currentStep = ref<"category" | "subcategory">("category");
+const activeCategoryName = ref("");
+const searchQuery = ref("");
 const showCustomInput = ref(false);
 const customName = ref("");
 const customError = ref("");
@@ -243,45 +299,51 @@ const isChecking = ref(false);
 const localChoices = ref<Record<string, Record<string, { name: string; isNew: boolean }>>>({});
 let isActive = true;
 
-const updateScrollState = () => {
-  const el = choiceListEl.value;
-  if (!el) return;
-  canScrollMore.value = el.scrollHeight - (el.scrollTop + el.clientHeight) > 20;
-};
-
-const onChoiceListScroll = () => {
-  updateScrollState();
-};
-
-const scrollDownList = () => {
-  if (choiceListEl.value) {
-    choiceListEl.value.scrollBy({ top: 180, behavior: "smooth" });
-  }
-};
-
-watch(activePicker, async (val) => {
-  if (val) {
-    canScrollMore.value = true;
-    await nextTick();
-    updateScrollState();
-    setTimeout(updateScrollState, 350);
-  }
-});
-
 const categoryKey = (cat: string) => getCategoryConfig(cat)?.key || normalizeCategoryKey(cat);
-const isKnownCategory = computed(() => Boolean(getCategoryConfig(props.category)));
 
-// Keep legacy spelling and unknown values until selection changes
-const categoryOptions = computed(() => {
-  const options = mainCategories.map((cat) => ({
-    label: cat.name,
-    value: categoryKey(props.category) === cat.key ? props.category : cat.name
-  }));
-  if (props.category && !isKnownCategory.value) {
-    options.unshift({ label: props.category, value: props.category });
+const openCategoryPicker = () => {
+  if (props.disabled || isChecking.value) return;
+  searchQuery.value = "";
+  if (props.category) {
+    activeCategoryName.value = props.category;
+    currentStep.value = "category";
+  } else {
+    currentStep.value = "category";
+    activeCategoryName.value = "";
   }
-  return options;
+  isPickerOpen.value = true;
+};
+
+const handlePickerDismiss = () => {
+  isPickerOpen.value = false;
+  resetCustomInput();
+};
+
+const goBackToCategories = () => {
+  currentStep.value = "category";
+  searchQuery.value = "";
+  resetCustomInput();
+};
+
+// Search filter on categories
+const filteredCategories = computed<CategoryConfig[]>(() => {
+  const q = searchQuery.value.trim().toLowerCase();
+  if (!q) return mainCategories;
+  return mainCategories.filter((cat) => {
+    return (
+      cat.name.toLowerCase().includes(q) ||
+      cat.key.toLowerCase().includes(q)
+    );
+  });
 });
+
+const isCategorySelected = (name: string) => {
+  return normalizeCategoryKey(name) === normalizeCategoryKey(props.category);
+};
+
+const isSubcategorySelected = (name: string) => {
+  return normalizeCategoryKey(name) === normalizeCategoryKey(props.subCategory);
+};
 
 const availableSubcategories = (cat: string) => {
   const names = [...getSubcategoriesForCategory(cat)];
@@ -295,36 +357,19 @@ const availableSubcategories = (cat: string) => {
   return names;
 };
 
-const subcategoryOptions = computed(() => {
-  if (!props.category) return [];
-  const selectedKey = normalizeCategoryKey(props.subCategory);
-  const options = availableSubcategories(props.category).map((name) => ({
-    label: name,
-    value: props.subCategory && normalizeCategoryKey(name) === selectedKey ? props.subCategory : name
-  }));
-  if (props.subCategory && !options.some((opt) => normalizeCategoryKey(opt.value) === selectedKey)) {
-    options.unshift({ label: props.subCategory, value: props.subCategory });
-  }
-  return options;
+const currentSubcategoryList = computed(() => {
+  if (!activeCategoryName.value) return [];
+  return availableSubcategories(activeCategoryName.value);
 });
 
-const selectedCategoryLabel = computed(() =>
-  categoryOptions.value.find((opt) => opt.value === props.category)?.label
-);
-const selectedSubcategoryLabel = computed(() =>
-  subcategoryOptions.value.find((opt) => opt.value === props.subCategory)?.label
-);
-
-const resetCustomInput = () => {
-  showCustomInput.value = false;
-  customName.value = "";
-  customError.value = "";
-};
-
-const handlePickerDismiss = () => {
-  activePicker.value = null;
-  resetCustomInput();
-};
+// Summary label for compact row on Create Post
+const displayCategorySummary = computed(() => {
+  if (!props.category) return "";
+  if (props.subCategory) {
+    return `${props.category} · ${props.subCategory}`;
+  }
+  return props.category;
+});
 
 const updatePendingSelection = (cat: string, name?: string) => {
   const key = normalizeCategoryKey(name);
@@ -338,34 +383,54 @@ const updatePendingSelection = (cat: string, name?: string) => {
   );
 };
 
-const changeCategory = (nextCat: string) => {
-  if (props.disabled || isChecking.value) return;
-  if (nextCat !== props.category) {
+// On selecting a main category:
+const onSelectMainCategory = (cat: CategoryConfig) => {
+  activeCategoryName.value = cat.name;
+  const subcats = availableSubcategories(cat.name);
+
+  // If category changed, update parent
+  if (props.category !== cat.name) {
+    emit("update:category", cat.name);
+    // If previous subcategory is no longer valid, clear it
     const selectedKey = normalizeCategoryKey(props.subCategory);
-    const stillValid = availableSubcategories(nextCat).some(
-      (name) => normalizeCategoryKey(name) === selectedKey
-    );
-    emit("update:category", nextCat);
+    const stillValid = subcats.some((name) => normalizeCategoryKey(name) === selectedKey);
     if (props.subCategory && !stillValid) {
       emit("update:subCategory", "");
+      updatePendingSelection(cat.name, undefined);
     }
-    updatePendingSelection(nextCat, stillValid ? props.subCategory : undefined);
-    resetCustomInput();
   }
-  activePicker.value = null;
+
+  // If category has subcategories, drill down into subcategory view
+  if (subcats.length > 0) {
+    currentStep.value = "subcategory";
+    resetCustomInput();
+  } else {
+    // No subcategories: close modal
+    emit("update:subCategory", "");
+    updatePendingSelection(cat.name, undefined);
+    isPickerOpen.value = false;
+  }
 };
 
-const changeSubcategory = (name: string) => {
+// On selecting a subcategory:
+const onSelectSubcategory = (name: string) => {
   if (props.disabled || isChecking.value) return;
   emit("update:subCategory", name);
-  updatePendingSelection(props.category, name);
-  activePicker.value = null;
+  updatePendingSelection(activeCategoryName.value || props.category, name);
+  isPickerOpen.value = false;
+};
+
+const resetCustomInput = () => {
+  showCustomInput.value = false;
+  customName.value = "";
+  customError.value = "";
 };
 
 const addCustomSubcategory = async () => {
   if (props.disabled || isChecking.value) return;
   customError.value = "";
-  if (!isKnownCategory.value) {
+  const cat = activeCategoryName.value || props.category;
+  if (!cat) {
     customError.value = "Choose a category first.";
     return;
   }
@@ -375,16 +440,15 @@ const addCustomSubcategory = async () => {
     return;
   }
 
-  const category = props.category;
   isChecking.value = true;
   emit("checking-change", true);
   try {
-    const existingLocal = localChoices.value[categoryKey(category)]?.[normalizedKey];
+    const existingLocal = localChoices.value[categoryKey(cat)]?.[normalizedKey];
     const resolved = await resolveCustomSubcategory(
-      category,
+      cat,
       existingLocal?.name || customName.value
     );
-    if (!isActive || props.category !== category) return;
+    if (!isActive) return;
     localChoices.value[resolved.categoryKey] ||= {};
     localChoices.value[resolved.categoryKey][resolved.normalizedKey] = {
       name: resolved.name,
@@ -393,10 +457,10 @@ const addCustomSubcategory = async () => {
     emit("update:subCategory", resolved.name);
     emit(
       "update:pendingSubcategory",
-      resolved.isNew ? { category, name: resolved.name } : undefined
+      resolved.isNew ? { category: cat, name: resolved.name } : undefined
     );
     resetCustomInput();
-    activePicker.value = null;
+    isPickerOpen.value = false;
   } catch (error) {
     if (isActive) {
       customError.value =
@@ -432,12 +496,13 @@ onUnmounted(() => {
   width: 100%;
 }
 
+/* Compact Single Row Button on Form */
 .picker-row-btn {
   display: flex;
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  min-height: 46px;
+  min-height: 48px;
   padding: 12px 2px;
   border: none;
   border-bottom: 1px solid var(--app-card-border);
@@ -481,7 +546,8 @@ onUnmounted(() => {
 }
 
 .row-value {
-  font-size: 13px;
+  font-size: 13.5px;
+  font-weight: 500;
   color: var(--app-text-primary);
   white-space: nowrap;
   overflow: hidden;
@@ -490,6 +556,7 @@ onUnmounted(() => {
 
 .row-value.placeholder {
   color: var(--app-text-tertiary);
+  font-weight: 400;
 }
 
 .row-chevron {
@@ -503,242 +570,335 @@ onUnmounted(() => {
   font-size: 12px;
 }
 
-/* Modal Bottom Sheet */
-.category-picker-modal {
+/* Modal Styling - Centered / Mobile Dialog (NOT a bottom sheet) */
+.compact-category-modal {
+  --width: calc(100% - 32px);
+  --max-width: 420px;
   --height: auto;
-  --max-height: 85vh;
-  --width: 100%;
-  --max-width: 480px;
-  --border-radius: 24px 24px 0 0;
+  --max-height: 75vh;
+  --border-radius: 20px;
+  --box-shadow: 0 16px 40px rgba(0, 0, 0, 0.28);
 }
 
-.choice-sheet {
+.compact-category-modal::part(content) {
+  border-radius: 20px;
+  overflow: hidden;
+  background: var(--app-surface, #141820);
+  border: 1px solid var(--app-card-border, rgba(255, 255, 255, 0.08));
+}
+
+.picker-card-content {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  max-height: 75vh;
   background: var(--app-surface);
   color: var(--app-text-primary);
+  box-sizing: border-box;
 }
 
-.choice-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 20px 12px;
+/* Header */
+.picker-header {
+  padding: 16px 18px 12px;
   border-bottom: 1px solid var(--app-card-border);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   flex-shrink: 0;
 }
 
-.header-titles {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+.subcat-header {
+  gap: 4px;
 }
 
-.choice-title {
+.header-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.picker-title {
   margin: 0;
   font-size: 17px;
   font-weight: 700;
+  letter-spacing: -0.015em;
   color: var(--app-text-primary);
 }
 
-.choice-subtitle {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--app-text-tertiary);
-}
-
-.close-sheet-btn {
+.modal-close-btn {
   background: transparent;
   border: none;
   color: var(--app-text-secondary);
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   padding: 0;
+  transition: background-color 0.15s ease;
 }
 
-.close-sheet-btn:active {
+.modal-close-btn:active {
   background: var(--app-surface-secondary);
 }
 
-.choice-list-wrapper {
-  position: relative;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
+/* Back button in Subcategory view */
+.back-to-categories-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: var(--app-text-primary);
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: left;
 }
 
-.choice-list {
+.back-to-categories-btn:active {
+  opacity: 0.75;
+}
+
+.active-category-title {
+  color: var(--app-text-primary);
+}
+
+.subcat-subtitle {
+  margin: 0;
+  font-size: 12px;
+  color: var(--app-text-secondary);
+}
+
+/* Instant Search Input */
+.search-input-wrap {
+  display: flex;
+  align-items: center;
+  position: relative;
+  background: var(--app-surface-secondary);
+  border: 1px solid var(--app-card-border);
+  border-radius: 12px;
+  padding: 0 10px 0 32px;
+  height: 38px;
+}
+
+.search-icon {
+  position: absolute;
+  left: 10px;
+  color: var(--app-text-tertiary);
+  pointer-events: none;
+}
+
+.search-input {
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: 13.5px;
+  color: var(--app-text-primary);
+}
+
+.search-input::placeholder {
+  color: var(--app-text-tertiary);
+}
+
+.clear-search-btn {
+  background: transparent;
+  border: none;
+  color: var(--app-text-tertiary);
+  padding: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Body & Internal Scroll */
+.picker-body {
   overflow-y: auto;
   flex: 1;
-  padding: 8px 18px 48px;
+  padding: 14px 16px 20px;
   scrollbar-width: thin;
   scrollbar-color: var(--app-card-border) transparent;
 }
 
-.choice-list::-webkit-scrollbar {
+.picker-body::-webkit-scrollbar {
   width: 4px;
 }
 
-.choice-list::-webkit-scrollbar-thumb {
+.picker-body::-webkit-scrollbar-thumb {
   background: var(--app-card-border);
   border-radius: 4px;
 }
 
-.list-end-hint {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 18px 0 10px;
-  font-size: 11px;
-  font-weight: 600;
+/* Empty Search State */
+.empty-search-state {
+  padding: 32px 16px;
+  text-align: center;
+}
+
+.empty-text {
+  margin: 0;
+  font-size: 14px;
   color: var(--app-text-tertiary);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
 }
 
-.end-dot {
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: var(--app-text-tertiary);
+/* 2-Column Category Grid */
+.category-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
 }
 
-.scroll-more-overlay {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 56px;
-  pointer-events: none;
+.category-tile {
+  position: relative;
   display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  padding-bottom: 8px;
-  background: linear-gradient(to top, var(--app-surface) 35%, transparent 100%);
-}
-
-.scroll-more-pill {
-  pointer-events: auto;
-  cursor: pointer;
-  display: inline-flex;
+  flex-direction: column;
   align-items: center;
-  gap: 5px;
-  padding: 5px 13px;
-  border-radius: 16px;
-  background: var(--app-surface);
-  color: var(--app-primary);
-  border: 1px solid var(--app-card-border);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.2px;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
-  transition: transform 0.15s ease, background-color 0.15s ease;
-}
-
-.scroll-more-pill:active {
-  transform: scale(0.96);
+  justify-content: center;
+  gap: 8px;
+  height: 78px;
+  padding: 10px 8px;
   background: var(--app-surface-secondary);
+  border: 1px solid var(--app-card-border);
+  border-radius: 13px;
+  cursor: pointer;
+  transition: transform 0.12s ease, border-color 0.15s ease, background-color 0.15s ease;
+  text-align: center;
 }
 
-.bounce-icon {
-  animation: bounceDown 1.6s ease-in-out infinite;
+.category-tile:hover {
+  background: var(--app-surface-tertiary, rgba(255, 255, 255, 0.06));
+  border-color: rgba(38, 64, 219, 0.4);
 }
 
-@keyframes bounceDown {
-  0%, 100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(3px);
-  }
+.category-tile:active {
+  transform: scale(0.97);
 }
 
-.fade-hint-enter-active,
-.fade-hint-leave-active {
-  transition: opacity 0.2s ease, transform 0.2s ease;
+.category-tile.selected {
+  border-color: var(--app-primary, #2640DB);
+  background: rgba(38, 64, 219, 0.09);
 }
 
-.fade-hint-enter-from,
-.fade-hint-leave-to {
-  opacity: 0;
-  transform: translateY(6px);
+.tile-icon-box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.choice-row {
+.tile-icon {
+  color: var(--app-text-secondary);
+  transition: color 0.15s ease;
+}
+
+.category-tile.selected .tile-icon {
+  color: var(--app-primary, #2640DB);
+}
+
+.tile-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--app-text-primary);
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.category-tile.selected .tile-name {
+  color: var(--app-primary, #2640DB);
+}
+
+.tile-selected-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  color: var(--app-primary, #2640DB);
+}
+
+/* 2-Column Subcategory Grid & Chips */
+.subcategory-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.subcat-chip {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  width: 100%;
-  min-height: 48px;
-  padding: 12px 6px;
-  border: none;
-  border-bottom: 1px solid var(--app-card-border);
-  background: transparent;
-  font: inherit;
-  font-size: 14px;
-  color: var(--app-text-primary);
-  text-align: left;
-  cursor: pointer;
-  transition: background-color 0.15s ease;
-}
-
-.choice-row:last-child {
-  border-bottom: none;
-}
-
-.choice-row:active {
+  padding: 10px 12px;
+  min-height: 42px;
   background: var(--app-surface-secondary);
+  border: 1px solid var(--app-card-border);
+  border-radius: 11px;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  text-align: left;
 }
 
-.choice-row.active {
-  color: var(--app-primary);
-  font-weight: 600;
+.subcat-chip:hover {
+  background: var(--app-surface-tertiary, rgba(255, 255, 255, 0.06));
+  border-color: rgba(38, 64, 219, 0.4);
 }
 
-.choice-text {
+.subcat-chip:active {
+  transform: scale(0.98);
+}
+
+.subcat-chip.selected {
+  border-color: var(--app-primary, #2640DB);
+  background: rgba(38, 64, 219, 0.09);
+}
+
+.subcat-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--app-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   flex: 1;
 }
 
-.optional-label {
-  color: var(--app-text-tertiary);
-  font-weight: 400;
-  font-size: 13px;
+.subcat-chip.selected .subcat-name {
+  color: var(--app-primary, #2640DB);
+  font-weight: 600;
 }
 
-.choice-check {
-  color: var(--app-primary);
+.chip-check {
+  color: var(--app-primary, #2640DB);
   flex-shrink: 0;
+  margin-left: 6px;
 }
 
 /* Custom Subcategory Section */
-.custom-subcategory-section {
-  padding: 12px 6px 6px;
+.custom-subcategory-wrap {
+  margin-top: 14px;
+  padding-top: 12px;
   border-top: 1px dashed var(--app-card-border);
-  margin-top: 6px;
 }
 
-.add-custom-btn {
+.add-custom-link-btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   background: transparent;
   border: none;
-  color: var(--app-primary);
+  color: var(--app-primary, #2640DB);
   font-size: 13px;
   font-weight: 600;
-  padding: 8px 0;
+  padding: 6px 0;
   cursor: pointer;
 }
 
-.add-custom-btn:disabled {
+.add-custom-link-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -747,7 +907,7 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 6px 0;
+  padding: 4px 0;
 }
 
 .custom-input-row {
@@ -770,11 +930,11 @@ onUnmounted(() => {
 }
 
 .custom-input-row input:focus {
-  border-color: var(--app-primary);
+  border-color: var(--app-primary, #2640DB);
 }
 
 .save-custom-btn {
-  background: var(--app-primary);
+  background: var(--app-primary, #2640DB);
   color: #ffffff;
   border: none;
   border-radius: 10px;
@@ -808,8 +968,39 @@ onUnmounted(() => {
 }
 
 @keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
   to {
     transform: rotate(360deg);
+  }
+}
+
+/* Mobile responsive constraints (360px - 430px) */
+@media (max-width: 380px) {
+  .compact-category-modal {
+    --width: calc(100% - 24px);
+  }
+
+  .category-grid {
+    gap: 8px;
+  }
+
+  .category-tile {
+    height: 72px;
+    padding: 8px 6px;
+  }
+
+  .tile-name {
+    font-size: 11.5px;
+  }
+
+  .subcategory-grid {
+    gap: 6px;
+  }
+
+  .subcat-chip {
+    padding: 8px 10px;
   }
 }
 </style>

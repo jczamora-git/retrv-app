@@ -7,7 +7,7 @@
       </ion-toolbar>
     </ion-header>
 
-    <ion-content :fullscreen="true" class="ios-content">
+    <ion-content :fullscreen="false" :force-overscroll="false" class="ios-content">
       <!-- Pull To Refresh -->
       <ion-refresher slot="fixed" @ion-refresh="handleRefresh">
         <ion-refresher-content pulling-icon="arrow-down" refreshing-spinner="crescent" />

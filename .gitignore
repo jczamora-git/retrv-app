@@ -32,6 +32,11 @@ coverage/
 dist/
 node_modules/
 platforms/
-plugins/
-www/
 server/data/
+
+# Android Keystores & Build Artifacts
+*.jks
+*.keystore
+*.aab
+*.apk
+*.pepk

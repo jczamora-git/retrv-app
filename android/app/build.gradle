@@ -1,14 +1,14 @@
 apply plugin: 'com.android.application'
 
 android {
-    namespace = "io.ionic.starter"
+    namespace = "com.jc.retrv"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "io.ionic.starter"
+        applicationId "com.jc.retrv"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 2
-        versionName "2.0.0"
+        versionCode 1
+        versionName "1.0.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,8 +16,24 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            if (System.getenv("RETRV_KEYSTORE_FILE") != null && file(System.getenv("RETRV_KEYSTORE_FILE")).exists()) {
+                storeFile file(System.getenv("RETRV_KEYSTORE_FILE"))
+                storePassword System.getenv("RETRV_KEYSTORE_PASSWORD")
+                keyAlias System.getenv("RETRV_KEY_ALIAS")
+                keyPassword System.getenv("RETRV_KEY_PASSWORD")
+            } else if (project.hasProperty("RETRV_KEYSTORE_FILE") && file(project.property("RETRV_KEYSTORE_FILE")).exists()) {
+                storeFile file(project.property("RETRV_KEYSTORE_FILE"))
+                storePassword project.property("RETRV_KEYSTORE_PASSWORD")
+                keyAlias project.property("RETRV_KEY_ALIAS")
+                keyPassword project.property("RETRV_KEY_PASSWORD")
+            }
+        }
+    }
     buildTypes {
         release {
+            signingConfig signingConfigs.release.storeFile ? signingConfigs.release : null
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

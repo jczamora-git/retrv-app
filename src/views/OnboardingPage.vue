@@ -1,6 +1,6 @@
 <template>
   <ion-page>
-    <ion-content :fullscreen="true" class="onboarding-content">
+    <ion-content :fullscreen="false" :force-overscroll="false" class="onboarding-content">
       <div class="ios-screen-container onboarding-container">
         <!-- Branded Logo & Header -->
         <header class="onboarding-hero">

@@ -7,7 +7,7 @@
       default-back-url="/tabs/home"
     />
 
-    <ion-content :fullscreen="true" class="public-content">
+    <ion-content :fullscreen="false" :force-overscroll="false" class="public-content">
       <div class="ios-screen-container public-container">
         <div v-if="loading" class="public-loading">
           <ion-spinner name="crescent" />

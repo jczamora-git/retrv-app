@@ -3,7 +3,7 @@
     <!-- Fixed Header with Back Navigation -->
     <PageHeader title="Edit Profile" :show-back="true" default-back-url="/tabs/profile" />
 
-    <ion-content :fullscreen="true" class="edit-content">
+    <ion-content :fullscreen="false" :force-overscroll="false" class="edit-content">
       <div class="ios-screen-container edit-container">
         <!-- Avatar Preview and Actions -->
         <div class="avatar-preview-section">

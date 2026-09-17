@@ -16,7 +16,7 @@
       </template>
     </PageHeader>
 
-    <ion-content :fullscreen="true" class="messages-content">
+    <ion-content :fullscreen="false" :force-overscroll="false" class="messages-content">
       <ion-refresher slot="fixed" @ion-refresh="handleRefresh">
         <ion-refresher-content pulling-icon="arrow-down" refreshing-spinner="crescent" />
       </ion-refresher>

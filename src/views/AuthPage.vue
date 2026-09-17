@@ -1,6 +1,6 @@
 <template>
   <ion-page class="auth-page">
-    <ion-content :fullscreen="true" class="auth-content">
+    <ion-content :fullscreen="false" :force-overscroll="false" class="auth-content">
       <div class="auth-outer-wrap">
         <div class="auth-center-container">
           <!-- VIEW 1: SIGN IN -->
@@ -298,11 +298,35 @@
                 <span>{{ globalError }}</span>
               </div>
 
+              <!-- Terms & Guidelines Agreement Checkbox -->
+              <div class="legal-agreement-group">
+                <label class="agreement-checkbox-label">
+                  <input
+                    id="signup-agree-policies"
+                    v-model="agreedToPolicies"
+                    type="checkbox"
+                    class="agreement-checkbox"
+                  />
+                  <span class="agreement-text">
+                    I agree to the
+                    <button type="button" class="legal-inline-btn" @click.stop="openPolicy('/legal/terms')">Terms of Use</button>
+                    and
+                    <button type="button" class="legal-inline-btn" @click.stop="openPolicy('/legal/community-guidelines')">Community Guidelines</button>.
+                  </span>
+                </label>
+
+                <p class="legal-policy-hint">
+                  Read our
+                  <button type="button" class="legal-inline-btn" @click.stop="openPolicy('/legal/privacy')">Privacy Policy</button>
+                  to learn how we protect your data.
+                </p>
+              </div>
+
               <!-- Submit Button -->
               <button
                 type="submit"
                 class="auth-primary-btn"
-                :disabled="loading"
+                :disabled="loading || !agreedToPolicies"
               >
                 <ion-spinner v-if="loading" name="crescent" class="btn-spinner" />
                 <span v-else>Create Account</span>
@@ -330,6 +354,11 @@ type AuthView = "signin" | "create-profile" | "create-account";
 const view = ref<AuthView>("signin");
 const loading = ref(false);
 const globalError = ref("");
+const agreedToPolicies = ref(false);
+
+const openPolicy = (path: string) => {
+  router.push(path);
+};
 
 // Password visibility states (hidden by default)
 const showSignInPassword = ref(false);
@@ -570,6 +599,10 @@ const handleContinueToAccount = async () => {
 };
 
 const handleCreateAccount = async () => {
+  if (!agreedToPolicies.value) {
+    globalError.value = "You must agree to the Terms of Use and Community Guidelines to create an account.";
+    return;
+  }
   if (!validateAccountStep() || loading.value) return;
   loading.value = true;
   try {
@@ -927,5 +960,67 @@ const handleCreateAccount = async () => {
 
 .switch-link-btn:active {
   opacity: 0.7;
+}
+
+/* Legal Agreement & Policy Checkbox */
+.legal-agreement-group {
+  margin: 6px 0 20px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.agreement-checkbox-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.agreement-checkbox {
+  appearance: auto;
+  -webkit-appearance: auto;
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  accent-color: var(--app-primary, #2640DB);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.agreement-text {
+  font-size: 13px;
+  color: var(--app-text-secondary, #72777D);
+  line-height: 1.45;
+}
+
+.legal-inline-btn {
+  display: inline;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--app-primary-accent, #3B82F6);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.legal-inline-btn:hover {
+  color: var(--app-primary, #2640DB);
+}
+
+.legal-inline-btn:active {
+  opacity: 0.75;
+}
+
+.legal-policy-hint {
+  margin: 0 0 0 28px;
+  font-size: 12px;
+  color: var(--app-text-muted, #9AA0A6);
+  line-height: 1.4;
 }
 </style>

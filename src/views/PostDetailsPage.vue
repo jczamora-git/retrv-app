@@ -22,7 +22,7 @@
       </ion-toolbar>
     </ion-header>
 
-    <ion-content :fullscreen="true" class="details-content">
+    <ion-content :fullscreen="false" :force-overscroll="false" class="details-content">
       <div v-if="loading" class="details-loading">
         <ion-spinner name="crescent" />
         <span>Loading item details...</span>

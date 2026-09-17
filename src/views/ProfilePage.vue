@@ -3,7 +3,7 @@
     <!-- Fixed Page Header -->
     <PageHeader title="My Profile" />
 
-    <ion-content :fullscreen="true" class="profile-content">
+    <ion-content :fullscreen="false" :force-overscroll="false" class="profile-content">
       <div class="ios-screen-container profile-container">
         <!-- Modern Profile Hero Card -->
         <div class="profile-hero-card">
@@ -60,7 +60,7 @@
               </div>
             </div>
 
-            <!-- Action Row: Edit Profile, Theme Toggle, Sign Out -->
+            <!-- Clean 2-Item Action Row: Edit Profile (80%) & Settings (20%) -->
             <div class="profile-action-row">
               <button
                 type="button"
@@ -73,37 +73,25 @@
 
               <button
                 type="button"
-                class="hero-theme-btn"
-                aria-label="Change theme"
-                :title="themeAriaLabel"
-                @click="cycleTheme"
+                class="hero-settings-btn"
+                aria-label="Profile settings"
+                title="Settings"
+                @click="router.push('/settings')"
               >
-                <Sun v-if="themePreference === 'light'" :size="19" />
-                <Moon v-else-if="themePreference === 'dark'" :size="19" />
-                <Monitor v-else :size="19" />
-              </button>
-
-              <button
-                type="button"
-                class="hero-signout-btn"
-                aria-label="Sign out"
-                title="Sign out"
-                @click="handleSignOut"
-              >
-                <LogOut :size="18" />
+                <Settings :size="20" />
               </button>
             </div>
           </div>
         </div>
 
-        <!-- Achievements Section -->
+        <!-- Achievements Section (Directly below hero) -->
         <AchievementsSection
           v-if="targetProfileId"
           :user-id="targetProfileId"
           :is-own-profile="true"
         />
 
-        <!-- My Posts Section Header & Filter Pills -->
+        <!-- My Posts Section Header & Filter Pills (Directly below achievements) -->
         <section class="posts-heading-section">
           <div class="heading-row">
             <h2 class="section-title">My Posts</h2>
@@ -132,7 +120,7 @@
             <FileText :size="28" class="empty-icon" />
           </div>
           <h3 class="empty-title">No posts yet</h3>
-          <p class="empty-sub">Your Lost & Found posts will appear here.</p>
+          <p class="empty-sub">Your Lost &amp; Found posts will appear here.</p>
           <button
             type="button"
             class="create-first-post-btn"
@@ -172,20 +160,16 @@ import {
   IonContent,
   IonPage,
   onIonViewWillEnter,
-  actionSheetController,
   toastController
 } from "@ionic/vue";
 import PageHeader from "../components/PageHeader.vue";
 import {
   Pencil,
-  Sun,
-  Moon,
-  Monitor,
+  Settings,
   FileText,
   CircleHelp,
   SearchCheck,
-  LayoutGrid,
-  LogOut
+  LayoutGrid
 } from "lucide-vue-next";
 import UserAvatar from "../components/UserAvatar.vue";
 import PostCard from "../components/PostCard.vue";
@@ -194,14 +178,12 @@ import AchievementsSection from "../components/AchievementsSection.vue";
 import AchievementBadge from "../components/AchievementBadge.vue";
 import { useAuth, currentAppUserId } from "../composables/useAuth";
 import { usePosts } from "../composables/usePosts";
-import { useTheme } from "../composables/useTheme";
 import { useAchievements } from "../composables/useAchievements";
-import type { Post, PostFormData } from "../types/post";
+import type { PostFormData } from "../types/post";
 
 const router = useRouter();
-const { currentProfile, signOutUser } = useAuth();
+const { currentProfile } = useAuth();
 const { posts, toggleHelpful, isHelpfulByMe, createPost } = usePosts();
-const { themePreference, setTheme } = useTheme();
 const { loadAchievementsForUser } = useAchievements();
 
 const targetProfileId = computed(() => (currentAppUserId.value || currentProfile.value?.id || "").trim());
@@ -211,51 +193,6 @@ onIonViewWillEnter(() => {
     loadAchievementsForUser(targetProfileId.value, true);
   }
 });
-
-const cycleTheme = () => {
-  if (themePreference.value === "light") {
-    setTheme("dark");
-  } else if (themePreference.value === "dark") {
-    setTheme("system");
-  } else {
-    setTheme("light");
-  }
-};
-
-const themeAriaLabel = computed(() => {
-  if (themePreference.value === "light") return "Theme: Light";
-  if (themePreference.value === "dark") return "Theme: Dark";
-  return "Theme: System";
-});
-
-const handleSignOut = async () => {
-  const actionSheet = await actionSheetController.create({
-    header: "Sign Out",
-    subHeader: "Are you sure you want to sign out of your account?",
-    buttons: [
-      {
-        text: "Sign Out",
-        role: "destructive",
-        handler: async () => {
-          await signOutUser();
-          const toast = await toastController.create({
-            message: "Signed out successfully.",
-            duration: 2000,
-            position: "top",
-            color: "medium"
-          });
-          await toast.present();
-          router.replace("/auth");
-        }
-      },
-      {
-        text: "Cancel",
-        role: "cancel"
-      }
-    ]
-  });
-  await actionSheet.present();
-};
 
 const showComposer = ref(false);
 const activeTab = ref<"Posts" | "Lost" | "Found">("Posts");
@@ -473,7 +410,7 @@ const handleCreate = async (data: PostFormData) => {
   opacity: 0.8;
 }
 
-/* 6. Action Row: High-Contrast CTA Button, Theme Toggle, & Sign Out */
+/* 6. Clean 2-Item Action Row: Edit Profile (80%) & Settings (20%) */
 .profile-action-row {
   display: flex;
   align-items: center;
@@ -511,9 +448,11 @@ const handleCreate = async (data: PostFormData) => {
   opacity: 0.88;
 }
 
-.hero-theme-btn {
+.hero-settings-btn {
   width: 50px;
   height: 50px;
+  min-width: 48px;
+  min-height: 48px;
   flex-shrink: 0;
   border-radius: 999px;
   border: 1px solid var(--app-card-border);
@@ -526,42 +465,16 @@ const handleCreate = async (data: PostFormData) => {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
   transition: all 0.15s ease;
   padding: 0;
+  touch-action: manipulation;
 }
 
-.hero-theme-btn:hover {
-  background: var(--app-surface-tertiary);
+.hero-settings-btn:hover {
+  background: var(--app-surface-tertiary, rgba(255, 255, 255, 0.08));
+  border-color: rgba(38, 64, 219, 0.35);
   transform: translateY(-1px);
 }
 
-.hero-theme-btn:active {
-  transform: scale(0.96);
-  opacity: 0.88;
-}
-
-.hero-signout-btn {
-  width: 50px;
-  height: 50px;
-  flex-shrink: 0;
-  border-radius: 999px;
-  border: 1px solid rgba(239, 68, 68, 0.25);
-  background: rgba(239, 68, 68, 0.08);
-  color: var(--app-lost, #ef4444);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.04);
-  transition: all 0.15s ease;
-  padding: 0;
-}
-
-.hero-signout-btn:hover {
-  background: rgba(239, 68, 68, 0.15);
-  border-color: rgba(239, 68, 68, 0.4);
-  transform: translateY(-1px);
-}
-
-.hero-signout-btn:active {
+.hero-settings-btn:active {
   transform: scale(0.96);
   opacity: 0.88;
 }
