@@ -8,11 +8,15 @@
             <!-- Branding Header -->
             <header class="auth-brand">
               <img
-                src="/lost-and-found.png"
-                alt="Lost &amp; Found Logo"
+                src="/retrv-app@300x.png"
+                alt="Retrv app icon"
                 class="auth-logo"
               />
-              <h1 class="auth-title">Lost &amp; Found</h1>
+              <img
+                src="/retrv-text.svg"
+                alt="Retrv"
+                class="auth-wordmark"
+              />
               <p class="auth-subtitle">Community item recovery &amp; reconnection</p>
             </header>
 
@@ -91,11 +95,15 @@
             <!-- Branding Header -->
             <header class="auth-brand">
               <img
-                src="/lost-and-found.png"
-                alt="Lost &amp; Found Logo"
+                src="/retrv-app@300x.png"
+                alt="Retrv app icon"
                 class="auth-logo"
               />
-              <h1 class="auth-title">Lost &amp; Found</h1>
+              <img
+                src="/retrv-text.svg"
+                alt="Retrv"
+                class="auth-wordmark"
+              />
               <p class="auth-section-title">Create your profile</p>
             </header>
 
@@ -186,11 +194,15 @@
             <!-- Consistent Branding Header -->
             <header class="auth-brand auth-brand-compact">
               <img
-                src="/lost-and-found.png"
-                alt="Lost &amp; Found Logo"
+                src="/retrv-app@300x.png"
+                alt="Retrv app icon"
                 class="auth-logo"
               />
-              <h1 class="auth-title">Lost &amp; Found</h1>
+              <img
+                src="/retrv-text.svg"
+                alt="Retrv"
+                class="auth-wordmark"
+              />
             </header>
 
             <!-- Step Title Row with inline Back Button -->
@@ -634,8 +646,16 @@ const handleCreateAccount = async () => {
   width: 68px;
   height: 68px;
   object-fit: contain;
-  margin-bottom: 10px;
-  filter: drop-shadow(0 4px 12px rgba(47, 159, 232, 0.2));
+  margin-bottom: 12px;
+  border-radius: 16px;
+  filter: drop-shadow(0 4px 14px rgba(22, 55, 199, 0.22));
+}
+
+.auth-wordmark {
+  height: 28px;
+  width: auto;
+  display: block;
+  object-fit: contain;
 }
 
 .auth-title {

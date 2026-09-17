@@ -18,7 +18,7 @@ console.log('[UploadThing]', {
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`=========================================`);
-  console.log(`🚀 Lost & Found Local Development Server`);
+  console.log(`🚀 Retrv Local Development Server`);
   console.log(`📡 Listening on: http://0.0.0.0:${PORT} (LAN reachable)`);
   console.log(`=========================================`);
 });

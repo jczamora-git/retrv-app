@@ -216,3 +216,28 @@ ion-toast {
   flex-shrink: 0;
 }
 
+/* Brand Wordmark Styles & Dark Mode Support */
+.brand-wordmark,
+.home-brand-wordmark,
+.auth-wordmark,
+.onboarding-wordmark,
+.splash-wordmark {
+  display: block;
+  object-fit: contain;
+  transition: filter 0.2s ease;
+}
+
+.ion-palette-dark .brand-wordmark,
+.dark .brand-wordmark,
+.ion-palette-dark .home-brand-wordmark,
+.dark .home-brand-wordmark,
+.ion-palette-dark .auth-wordmark,
+.dark .auth-wordmark,
+.ion-palette-dark .onboarding-wordmark,
+.dark .onboarding-wordmark,
+.ion-palette-dark .splash-wordmark,
+.dark .splash-wordmark {
+  filter: brightness(0) invert(1);
+}
+
+

@@ -1,7 +1,7 @@
 {
-  "name": "Lost and Found",
-  "short_name": "Lost & Found",
-  "description": "Community-driven platform to report, find, and return lost items.",
+  "name": "Retrv",
+  "short_name": "Retrv",
+  "description": "Community-powered Lost & Found platform.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",

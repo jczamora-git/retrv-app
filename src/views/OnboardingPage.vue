@@ -5,11 +5,15 @@
         <!-- Branded Logo & Header -->
         <header class="onboarding-hero">
           <img
-            src="/lost-and-found.png"
-            alt="Lost &amp; Found Logo"
+            src="/retrv-app@300x.png"
+            alt="Retrv app icon"
             class="onboarding-logo"
           />
-          <h1 class="hero-title">Welcome to Lost &amp; Found</h1>
+          <img
+            src="/retrv-text.svg"
+            alt="Retrv"
+            class="onboarding-wordmark"
+          />
           <p class="hero-subtitle">Join the community and help reconnect people with their belongings.</p>
         </header>
 
@@ -175,7 +179,7 @@ const handleSubmit = async () => {
     });
 
     const toast = await toastController.create({
-      message: `Welcome to Lost & Found, ${form.name.trim()}!`,
+      message: `Welcome to Retrv, ${form.name.trim()}!`,
       duration: 2500,
       position: "top",
       color: "success"
@@ -218,9 +222,17 @@ const handleSubmit = async () => {
   width: 76px;
   height: 76px;
   object-fit: contain;
-  border-radius: 20px;
-  box-shadow: 0 8px 24px rgba(47, 159, 232, 0.15);
-  margin-bottom: 16px;
+  border-radius: 18px;
+  box-shadow: 0 8px 24px rgba(22, 55, 199, 0.22);
+  margin-bottom: 14px;
+}
+
+.onboarding-wordmark {
+  height: 30px;
+  width: auto;
+  display: block;
+  object-fit: contain;
+  margin-bottom: 10px;
 }
 
 .hero-title {

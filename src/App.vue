@@ -4,12 +4,16 @@
     <transition name="fade">
       <div v-if="!isAuthReady" class="app-splash-screen">
         <img
-          src="/lost-and-found.png"
-          alt="Lost &amp; Found Logo"
+          src="/retrv-app@300x.png"
+          alt="Retrv app icon"
           class="splash-logo"
         />
-        <h1 class="splash-title">Lost &amp; Found</h1>
-        <p class="splash-subtitle">Community Forum</p>
+        <img
+          src="/retrv-text.svg"
+          alt="Retrv"
+          class="splash-wordmark"
+        />
+        <p class="splash-subtitle">Community item recovery &amp; reconnection</p>
         <ion-spinner name="crescent" class="splash-spinner" />
       </div>
     </transition>
@@ -65,20 +69,20 @@ watch(hasValidSession, (valid) => {
   height: 88px;
   object-fit: contain;
   border-radius: 20px;
-  box-shadow: 0 8px 24px rgba(47, 159, 232, 0.2);
-  margin-bottom: 8px;
+  box-shadow: 0 8px 24px rgba(22, 55, 199, 0.25);
+  margin-bottom: 12px;
 }
 
-.splash-title {
-  margin: 0;
-  font-size: 24px;
-  font-weight: 800;
-  letter-spacing: -0.5px;
-  color: var(--app-text-primary);
+.splash-wordmark {
+  height: 32px;
+  width: auto;
+  display: block;
+  object-fit: contain;
+  margin-bottom: 6px;
 }
 
 .splash-subtitle {
-  margin: 0 0 16px;
+  margin: 0 0 18px;
   font-size: 14px;
   font-weight: 500;
   color: var(--app-text-secondary);

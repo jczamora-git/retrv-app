@@ -136,14 +136,14 @@ export const getPostShareData = (post: Post | null): PostSharePayload => {
   if (!post) {
     return {
       title: "Lost & Found Item",
-      text: "Check out this post on Lost & Found.",
+      text: "Check out this post on Retrv.",
       url: window.location.href
     };
   }
   const origin = window.location.origin;
   const url = `${origin}/post/${post.id}`;
   const title = `${post.type.toUpperCase()}: ${post.title}`;
-  const text = `${post.title} — ${post.location}. Check Lost & Found forum.`;
+  const text = `${post.title} — ${post.location}. Check Retrv.`;
   return { title, text, url };
 };
 </script>

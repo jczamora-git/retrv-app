@@ -6,7 +6,13 @@
         <div class="header-inner-box">
           <header class="home-top-bar">
             <div v-if="!isSearchActive" class="brand-bar-row">
-              <h1 class="home-brand-title">Lost &amp; Found</h1>
+              <div class="brand-wordmark-wrap">
+                <img
+                  src="/retrv-text.svg"
+                  alt="Retrv"
+                  class="home-brand-wordmark"
+                />
+              </div>
               <div class="header-actions-wrap">
                 <button
                   type="button"
@@ -530,13 +536,16 @@ const handleDirectCreate = async (data: PostFormData) => {
   justify-content: space-between;
 }
 
-.home-brand-title {
-  margin: 0;
-  font-size: 26px;
-  font-weight: 700;
-  letter-spacing: -0.5px;
-  color: var(--app-text-primary);
-  line-height: 1.2;
+.brand-wordmark-wrap {
+  display: flex;
+  align-items: center;
+}
+
+.home-brand-wordmark {
+  height: 26px;
+  width: auto;
+  display: block;
+  object-fit: contain;
 }
 
 .header-actions-wrap {
