@@ -1,34 +1,31 @@
-name: Build Ionic Android APK
+name: Build Retrv Android APK (v1)
 
 on:
   push:
     branches:
       - main
-
   workflow_dispatch:
 
 jobs:
   build-apk:
+    name: Build Retrv v1 APK
     runs-on: ubuntu-latest
 
     steps:
-
       # ----------------------------------------------------------
       # 1. Get the source code
       # ----------------------------------------------------------
       - name: Checkout project
-        uses: actions/checkout@v7
-
+        uses: actions/checkout@v4
 
       # ----------------------------------------------------------
       # 2. Install Node.js
       # ----------------------------------------------------------
       - name: Set up Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@v4
         with:
-          node-version: '24'
+          node-version: '20'
           cache: 'npm'
-
 
       # ----------------------------------------------------------
       # 3. Install project dependencies
@@ -36,17 +33,15 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
-
       # ----------------------------------------------------------
-      # 4. Build Ionic/Vue application with Supabase & API endpoint
+      # 4. Build Ionic/Vue application with Supabase & Retrv API
       # ----------------------------------------------------------
       - name: Build Ionic application
         env:
-          VITE_API_SERVER_URL: https://retrv-app.vercel.app
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          VITE_API_SERVER_URL: ${{ secrets.VITE_API_SERVER_URL || 'https://retrv-app.vercel.app' }}
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL || 'https://wertxmepxlozdkfriewu.supabase.co' }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_X35InNxn0EnGtr_8HiIe5A_emvUHgsA' }}
         run: npm run build
-
 
       # ----------------------------------------------------------
       # 5. Install Java 21
@@ -57,7 +52,6 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
-
       # ----------------------------------------------------------
       # 6. Confirm Java version
       # ----------------------------------------------------------
@@ -67,20 +61,17 @@ jobs:
           javac -version
           echo "JAVA_HOME=$JAVA_HOME"
 
-
       # ----------------------------------------------------------
       # 7. Synchronize Capacitor with Android
       # ----------------------------------------------------------
       - name: Sync Capacitor Android
         run: npx cap sync android
 
-
       # ----------------------------------------------------------
       # 8. Give Gradle execution permission
       # ----------------------------------------------------------
       - name: Make Gradle executable
         run: chmod +x android/gradlew
-
 
       # ----------------------------------------------------------
       # 9. Check Gradle environment
@@ -89,7 +80,6 @@ jobs:
         working-directory: android
         run: ./gradlew --version
 
-
       # ----------------------------------------------------------
       # 10. Build debug APK
       # ----------------------------------------------------------
@@ -97,22 +87,20 @@ jobs:
         working-directory: android
         run: ./gradlew assembleDebug
 
-
       # ----------------------------------------------------------
       # 11. Rename the generated APK
       # ----------------------------------------------------------
-      - name: Rename APK
+      - name: Rename APK for Retrv v1
         run: |
-          cp android/app/build/outputs/apk/debug/app-debug.apk IonicLostAndFound.apk
-
+          cp android/app/build/outputs/apk/debug/app-debug.apk Retrv-v1.apk
 
       # ----------------------------------------------------------
       # 12. Upload APK to GitHub Actions
       # ----------------------------------------------------------
-      - name: Upload APK
+      - name: Upload Retrv v1 APK
         uses: actions/upload-artifact@v4
         with:
-          name: IonicLostAndFound-APK
-          path: IonicLostAndFound.apk
+          name: Retrv-v1-APK
+          path: Retrv-v1.apk
           if-no-files-found: error
           retention-days: 30
