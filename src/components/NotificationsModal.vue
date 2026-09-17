@@ -80,13 +80,16 @@
             <div class="notif-details">
               <div class="notif-line-1">
                 <span class="notif-actor-name">{{ item.actorName }}</span>
-                <span v-if="item.type === 'merit_awarded'" class="notif-action-text merit-text">awarded you a Community Merit 🏅</span>
+                <span v-if="item.type === 'merit_awarded' || item.type === 'merit'" class="notif-action-text merit-text">awarded you a Community Merit 🏅</span>
                 <span v-else-if="item.type === 'reply'" class="notif-action-text">replied to your comment</span>
+                <span v-else-if="item.type === 'message'" class="notif-action-text">sent you a message</span>
+                <span v-else-if="item.type === 'resolved_post'" class="notif-action-text">marked post resolved</span>
+                <span v-else-if="item.type === 'new_post'" class="notif-action-text">posted a new report</span>
                 <span v-else class="notif-action-text">commented on your post</span>
               </div>
 
-              <p v-if="item.text && item.type !== 'merit_awarded'" class="notif-comment-quote">
-                &ldquo;{{ item.text }}&rdquo;
+              <p v-if="(item.message || item.text) && item.type !== 'merit_awarded' && item.type !== 'merit'" class="notif-comment-quote">
+                &ldquo;{{ item.message || item.text }}&rdquo;
               </p>
 
               <div class="notif-meta">
@@ -137,12 +140,18 @@ const handleMarkAllRead = async () => {
 };
 
 const handleClickNotification = async (item: AppNotification) => {
-  if (!item.read) {
+  if (!item.read && !item.isRead) {
     await markAsRead(item.id);
   }
   emit('close');
-  if (item.postId) {
+  if (item.type === 'message' && item.conversationId) {
+    router.push(`/chat/${item.conversationId}`);
+  } else if (item.type === 'merit' || item.type === 'merit_awarded') {
+    router.push('/tabs/profile');
+  } else if (item.postId) {
     router.push(`/post/${item.postId}`);
+  } else {
+    router.push('/tabs/home');
   }
 };
 </script>

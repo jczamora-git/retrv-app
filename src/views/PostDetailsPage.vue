@@ -543,7 +543,7 @@ const handleReplyToComment = (target: ReplyTarget) => {
   });
 };
 
-const handleSubmitComment = async (content: string) => {
+const handleSubmitComment = async (content: string, clientRequestId?: string) => {
   if (!post.value) return;
   try {
     const target = activeReplyTarget.value;
@@ -554,9 +554,10 @@ const handleSubmitComment = async (content: string) => {
         ? {
             parentCommentId: target.commentId,
             rootCommentId: target.rootCommentId,
-            parentAuthorId: target.authorId
+            parentAuthorId: target.authorId,
+            clientRequestId
           }
-        : undefined
+        : { clientRequestId }
     );
     activeReplyTarget.value = null;
   } catch (err: any) {

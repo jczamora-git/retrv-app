@@ -84,6 +84,7 @@
                   :message="msg"
                   :is-own="msg.senderId === myUid || resolveSender(msg.senderId).isOwn"
                   @reply="handleReplyMessage(msg)"
+                  @retry="handleRetryMessage(msg)"
                 />
               </div>
 
@@ -328,11 +329,26 @@ const {
   isMessagesLoading,
   isOtherTyping,
   loadHistory,
-  setupSocketListeners,
+  setupRealtimeSubscription,
   sendChatMessage,
+  retrySendMessage,
   handleTyping,
   cleanup
 } = useChat(conversationId.value, 'all');
+
+const handleRetryMessage = async (msg: ChatMessage) => {
+  try {
+    await retrySendMessage(msg);
+  } catch (err: any) {
+    const toast = await toastController.create({
+      message: err.message || 'Failed to retry message.',
+      duration: 2500,
+      position: 'top',
+      color: 'danger'
+    });
+    await toast.present();
+  }
+};
 
 const otherParticipant = ref<Profile | null>(null);
 const sending = ref(false);
@@ -371,9 +387,9 @@ const timelineGroups = computed<ChatDisplayGroup[]>(() => {
   >();
 
   for (const msg of sorted) {
-    const rawThreadId = msg.threadId || 'general';
-    const isPost = rawThreadId.startsWith('post_');
-    const postId = isPost ? rawThreadId.replace('post_', '') : null;
+    const rawThreadId = msg.threadId || msg.thread_id || (msg.postId || msg.post_id ? `post_${msg.postId || msg.post_id}` : 'general');
+    const isPost = rawThreadId.startsWith('post_') || Boolean(msg.postId || msg.post_id);
+    const postId = (msg.postId || msg.post_id) || (rawThreadId.startsWith('post_') ? rawThreadId.replace('post_', '') : null);
 
     if (isPost && postId) {
       if (postGroupMap.has(postId)) {
@@ -545,8 +561,8 @@ const handleRefreshMessages = async () => {
   if (isRefreshing.value) return;
   isRefreshing.value = true;
   try {
-    markAsRead(conversationId.value, 'all');
     await loadHistory('all', true);
+    await markAsRead(conversationId.value, 'all');
   } catch (err) {
     if (import.meta.env.DEV) {
       console.warn('[ChatPage] Manual refresh warning:', err);
@@ -637,8 +653,12 @@ onMounted(async () => {
 
   // 2. Load merged conversation history
   await loadHistory('all');
+  await markAsRead(conversationId.value, 'all');
 
-  // 3. If navigated with an initial post thread target (from "Message Poster"), pre-set composer context
+  // 3. Connect active conversation Realtime listener
+  setupRealtimeSubscription();
+
+  // 4. If navigated with an initial post thread target (from "Message Poster"), pre-set composer context
   const targetPostId =
     (route.query.postId as string) ||
     (initialThreadQuery.value.startsWith('post_')
@@ -649,7 +669,7 @@ onMounted(async () => {
     handleReplyPost(targetPostId);
   }
 
-  // 4. Initial bottom scroll after loading finishes
+  // 5. Initial bottom scroll after loading finishes
   await nextTick();
   setTimeout(() => {
     scrollToBottom(false);
@@ -658,6 +678,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   markAsRead(conversationId.value, 'all');
+  cleanup();
 });
 
 const handleSendMessage = async (payload: { text: string; file: File | null }) => {
@@ -681,8 +702,9 @@ const handleSendMessage = async (payload: { text: string; file: File | null }) =
       (activeReplyContext.value?.postId
         ? `post_${activeReplyContext.value.postId}`
         : 'general');
+    const postIdToSend = activeReplyContext.value?.postId || null;
 
-    await sendChatMessage(trimmed, imageUrl, imageKey, threadIdToSend);
+    await sendChatMessage(trimmed, imageUrl, imageKey, threadIdToSend, undefined, postIdToSend);
     composerRef.value?.clear();
 
     await nextTick();

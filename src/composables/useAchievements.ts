@@ -348,13 +348,21 @@ export function useAchievements(
       updated_at: now
     };
 
-    let newAchievementId: string | null = null;
+    let newAchievementAwarded = false;
     if (helperCanonicalId) {
-      const existing = getAchievementByPostId(params.postId);
-      if (!existing) {
-        newAchievementId = `ach_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-        try {
-          await supabase.from('achievements').insert({
+      // 1. Check in-memory and database to ensure this post hasn't already awarded a merit
+      const existingInMemory = getAchievementByPostId(params.postId);
+      if (!existingInMemory) {
+        const { data: existingDbAch } = await supabase
+          .from('achievements')
+          .select('id')
+          .eq('post_id', params.postId)
+          .eq('badge_id', 'community_merit')
+          .maybeSingle();
+
+        if (!existingDbAch) {
+          const newAchievementId = `ach_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+          const { error: insertErr } = await supabase.from('achievements').insert({
             id: newAchievementId,
             user_id: helperCanonicalId,
             badge_id: 'community_merit',
@@ -362,7 +370,11 @@ export function useAchievements(
             awarded_by: authorCanonicalId,
             unlocked_at: now
           });
-        } catch {}
+
+          if (!insertErr) {
+            newAchievementAwarded = true;
+          }
+        }
       }
     }
 
@@ -373,7 +385,7 @@ export function useAchievements(
     }
     await loadAchievementsForUser(authorCanonicalId, true);
 
-    if (helperCanonicalId && newAchievementId) {
+    if (helperCanonicalId && newAchievementAwarded) {
       const awarderName = currentProfile.value?.name || 'A community member';
       createMeritNotification({
         recipientId: helperCanonicalId,

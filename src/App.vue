@@ -24,27 +24,45 @@
 
 <script setup lang="ts">
 import { onMounted, watch } from "vue";
+import { useRouter } from "vue-router";
 import { IonApp, IonRouterOutlet, IonSpinner } from "@ionic/vue";
-import { useAuth } from "./composables/useAuth";
+import { useAuth, currentAppUserId } from "./composables/useAuth";
 import { useConversations } from "./composables/useConversations";
 import { useNotifications } from "./composables/useNotifications";
+import { useMessageUnread } from "./composables/useMessageUnread";
+import { initPushNotifications } from "./services/pushNotificationService";
 
+const router = useRouter();
 const { isAuthReady, hasValidSession, initializeAuthSession } = useAuth();
 const { subscribeToConversations } = useConversations();
-const { subscribeToNotifications } = useNotifications();
+const { subscribeToNotifications, unsubscribeFromNotifications } = useNotifications();
+const { setupConversationsRealtime, cleanupConversationsRealtime } = useMessageUnread();
 
 onMounted(async () => {
   await initializeAuthSession();
   if (hasValidSession.value) {
     subscribeToConversations();
+    setupConversationsRealtime();
     subscribeToNotifications();
+    const uid = currentAppUserId.value;
+    if (uid) {
+      initPushNotifications(uid, router);
+    }
   }
 });
 
 watch(hasValidSession, (valid) => {
   if (valid) {
     subscribeToConversations();
+    setupConversationsRealtime();
     subscribeToNotifications();
+    const uid = currentAppUserId.value;
+    if (uid) {
+      initPushNotifications(uid, router);
+    }
+  } else {
+    unsubscribeFromNotifications();
+    cleanupConversationsRealtime();
   }
 });
 </script>

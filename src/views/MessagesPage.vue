@@ -100,7 +100,8 @@ import {
   IonContent,
   IonRefresher,
   IonRefresherContent,
-  IonSkeletonText
+  IonSkeletonText,
+  onIonViewWillEnter
 } from '@ionic/vue';
 import { MessageCircle, Lock, WifiOff, RefreshCw } from 'lucide-vue-next';
 import PageHeader from '../components/PageHeader.vue';
@@ -117,6 +118,12 @@ const {
   subscribeToConversations,
   stopConversationSubscription
 } = useConversations();
+
+onIonViewWillEnter(() => {
+  if (hasValidSession.value) {
+    subscribeToConversations();
+  }
+});
 
 onMounted(() => {
   if (hasValidSession.value) {

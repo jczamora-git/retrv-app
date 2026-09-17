@@ -1,7 +1,13 @@
 import { ref, computed } from 'vue';
-import { useAuth, getSessionUser, sessionUid } from './useAuth';
+import { useAuth, getSessionUser, sessionUid, currentAppUserId } from './useAuth';
 import { usePosts } from './usePosts';
 import { useProfiles } from './useProfiles';
+import {
+  globalConversations,
+  messageUnreadCount,
+  setConversationRead,
+  resetLocalConversationUnread
+} from './useMessageUnread';
 import {
   useChatSocket,
   onConversationUpdated,
@@ -10,7 +16,7 @@ import {
 import type { Conversation, ConversationThread, ConversationWithMeta } from '../types/conversation';
 import type { Profile } from '../types/profile';
 
-const conversations = ref<ConversationWithMeta[]>([]);
+const conversations = globalConversations;
 const isConversationsLoading = ref(false);
 const hasConnectionError = ref(false);
 let inFlightConversationsPromise: Promise<ConversationWithMeta[]> | null = null;
@@ -24,20 +30,8 @@ export interface CreateConversationOptions {
   threadId?: string;
 }
 
-export const totalUnreadCount = computed<number>(() => {
-  const myUid = sessionUid.value;
-  if (!myUid) return 0;
+export const totalUnreadCount = messageUnreadCount;
 
-  return conversations.value.reduce((total, conv) => {
-    const count =
-      typeof conv.unreadCounts?.[myUid] === 'number'
-        ? conv.unreadCounts[myUid]
-        : conv.unread
-        ? 1
-        : 0;
-    return total + count;
-  }, 0);
-});
 
 export async function createOrGetConversation(
   arg1: CreateConversationOptions | string,
@@ -157,25 +151,12 @@ export function useConversations() {
     };
   };
 
-  const markAsRead = (conversationId: string, threadId?: string) => {
-    const myUid = sessionUid.value || currentProfile.value?.id;
-    if (!myUid) return;
-
-    localStorage.setItem(`laf_read_${conversationId}`, String(Date.now()));
-
-    const target = conversations.value.find((c) => c.id === conversationId);
-    if (target) {
-      if (!target.unreadCounts) target.unreadCounts = {};
-      target.unreadCounts[myUid] = 0;
-      target.unreadCount = 0;
-      target.unread = false;
-    }
-
-    markConversationAsRead(conversationId, myUid).catch(() => {});
+  const markAsRead = async (conversationId: string, threadId?: string) => {
+    await setConversationRead(conversationId);
   };
 
   const isConversationUnread = (conv: Conversation): boolean => {
-    const myUid = sessionUid.value || currentProfile.value?.id;
+    const myUid = currentAppUserId.value || sessionUid.value || currentProfile.value?.id;
     if (!myUid) return false;
 
     if (conv.unreadCounts && typeof conv.unreadCounts[myUid] === 'number') {
@@ -190,7 +171,7 @@ export function useConversations() {
   };
 
   const subscribeToConversations = async (): Promise<ConversationWithMeta[]> => {
-    const myUid = sessionUid.value || currentProfile.value?.id;
+    const myUid = currentAppUserId.value || sessionUid.value || currentProfile.value?.id;
     if (!myUid) return [];
 
     if (inFlightConversationsPromise) {
@@ -224,15 +205,17 @@ export function useConversations() {
             post = await getPostById(rawConv.postId);
           }
 
+          const counts = rawConv.unreadCounts || {};
           const unreadCount =
-            typeof rawConv.unreadCounts?.[myUid] === 'number'
-              ? rawConv.unreadCounts[myUid]
+            typeof counts[myUid] === 'number'
+              ? counts[myUid]
               : isConversationUnread(rawConv)
               ? 1
               : 0;
 
           loaded.push({
             ...rawConv,
+            unreadCounts: counts,
             otherParticipant: otherProfile,
             post,
             unread: unreadCount > 0,

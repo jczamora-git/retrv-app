@@ -9,5 +9,8 @@ export interface PostComment {
   updatedAt: number;
   parentCommentId?: string | null;
   rootCommentId?: string | null;
+  clientRequestId?: string;
+  client_request_id?: string;
+  status?: 'sending' | 'sent' | 'failed';
 }
 

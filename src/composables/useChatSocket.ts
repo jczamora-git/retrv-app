@@ -1,6 +1,8 @@
 import { ref } from 'vue';
 import { supabase } from '../utils/supabase';
 import { getSessionUser, currentAppUserId } from './useAuth';
+import { createNotification } from './useNotifications';
+import { idempotentInsert, generateClientRequestId } from '../utils/idempotency';
 import type { ChatMessage } from '../types/message';
 import type { Conversation, ConversationThread } from '../types/conversation';
 
@@ -205,28 +207,42 @@ export function useChatSocket() {
 
   const getConversationMessages = async (
     convId: string,
-    targetThreadId = 'all'
+    targetThreadId = 'all',
+    limit = 50
   ): Promise<ChatMessage[]> => {
     try {
       const { data, error } = await supabase
         .from('messages')
         .select('*')
         .eq('conversation_id', convId)
-        .order('created_at', { ascending: true });
+        .order('created_at', { ascending: false })
+        .limit(limit);
 
       if (error) throw error;
 
-      const messages: ChatMessage[] = (data || []).map((row) => ({
-        id: row.id,
-        conversationId: row.conversation_id,
-        threadId: 'general',
-        senderId: row.sender_id,
-        senderName: row.sender_name || 'Member',
-        text: row.text || '',
-        imageUrl: row.image_url || undefined,
-        createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
-        read: Boolean(row.read)
-      }));
+      // Reverse so oldest of the 50 is first (ascending chronological order)
+      const messages: ChatMessage[] = (data || []).reverse().map((row) => {
+        const rowThreadId = row.thread_id || (row.post_id ? `post_${row.post_id}` : 'general');
+        const rowPostId = row.post_id || (rowThreadId?.startsWith('post_') ? rowThreadId.replace('post_', '') : null);
+
+        return {
+          id: row.id,
+          conversationId: row.conversation_id,
+          threadId: rowThreadId,
+          thread_id: rowThreadId,
+          postId: rowPostId,
+          post_id: rowPostId,
+          senderId: row.sender_id,
+          senderName: row.sender_name || 'Member',
+          text: row.text || '',
+          imageUrl: row.image_url || undefined,
+          clientRequestId: row.client_request_id || row.clientRequestId || undefined,
+          client_request_id: row.client_request_id || row.clientRequestId || undefined,
+          createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+          read: Boolean(row.read),
+          status: 'sent'
+        };
+      });
 
       return messages;
     } catch (err) {
@@ -241,7 +257,9 @@ export function useChatSocket() {
     text: string,
     imageUrl?: string | null,
     imageKey?: string | null,
-    imagePath?: string | null
+    imagePath?: string | null,
+    clientRequestId?: string,
+    postId?: string | null
   ): Promise<ChatMessage> => {
     const session = await getSessionUser();
     const myUid = currentAppUserId.value || session?.id || session?.uid;
@@ -249,56 +267,141 @@ export function useChatSocket() {
       throw new Error('You must be signed in to send messages.');
     }
 
+    const clientReqId = clientRequestId || generateClientRequestId();
     const now = Date.now();
     const msgId = `msg_${now}_${Math.random().toString(36).substring(2, 7)}`;
     const cleanText = (text || '').trim();
 
-    const chatMsg: ChatMessage = {
+    const resolvedThreadId = threadId || 'general';
+    const resolvedPostId = postId || (resolvedThreadId.startsWith('post_') ? resolvedThreadId.replace('post_', '') : null);
+
+    const newRecord = {
       id: msgId,
-      conversationId,
-      threadId: threadId || 'general',
-      senderId: myUid,
-      senderName: session?.name || 'Member',
+      conversation_id: conversationId,
+      sender_id: myUid,
+      sender_name: session?.name || 'Member',
       text: cleanText,
-      imageUrl: imageUrl || undefined,
-      imageKey: imageKey || undefined,
-      createdAt: now,
-      read: false
+      image_url: imageUrl || null,
+      thread_id: resolvedThreadId,
+      post_id: resolvedPostId,
+      read: false,
+      client_request_id: clientReqId,
+      created_at: new Date(now).toISOString()
     };
 
     try {
-      await supabase.from('messages').insert({
-        id: msgId,
-        conversation_id: conversationId,
-        sender_id: myUid,
-        sender_name: chatMsg.senderName,
-        text: cleanText,
-        image_url: imageUrl || null,
-        read: false,
-        created_at: new Date(now).toISOString()
+      const insertResult = await idempotentInsert('messages', newRecord, {
+        userColumn: 'sender_id',
+        userId: myUid,
+        clientRequestId: clientReqId
       });
 
-      await supabase.from('conversations').update({
-        last_message: cleanText || (imageUrl ? '📷 Photo' : ''),
-        last_message_at: new Date(now).toISOString(),
-        updated_at: new Date(now).toISOString()
-      }).eq('id', conversationId);
+      const savedRow = insertResult.data || newRecord;
+      const finalThreadId = savedRow.thread_id || resolvedThreadId;
+      const finalPostId = savedRow.post_id || resolvedPostId;
+
+      const chatMsg: ChatMessage = {
+        id: savedRow.id || msgId,
+        conversationId,
+        threadId: finalThreadId,
+        thread_id: finalThreadId,
+        postId: finalPostId,
+        post_id: finalPostId,
+        senderId: myUid,
+        senderName: savedRow.sender_name || session?.name || 'Member',
+        text: savedRow.text || cleanText,
+        imageUrl: savedRow.image_url || imageUrl || undefined,
+        imageKey: imageKey || undefined,
+        clientRequestId: clientReqId,
+        client_request_id: clientReqId,
+        createdAt: savedRow.created_at ? new Date(savedRow.created_at).getTime() : now,
+        read: false,
+        status: 'sent'
+      };
+
+      if (import.meta.env.DEV) {
+        console.log('[ChatThread] send', {
+          messageId: chatMsg.id,
+          threadId: chatMsg.threadId,
+          postId: chatMsg.postId
+        });
+      }
+
+      // Only update unread counts and dispatch push/notifications if this is a genuinely NEW message (not a duplicate retry)
+      if (!insertResult.isDuplicate) {
+        const { data: convRow } = await supabase
+          .from('conversations')
+          .select('participant_ids, unread_counts')
+          .eq('id', conversationId)
+          .maybeSingle();
+
+        const participantIds: string[] = Array.isArray(convRow?.participant_ids) && convRow.participant_ids.length > 0
+          ? convRow.participant_ids
+          : conversationId.replace(/^conv_/, '').split('__');
+
+        const updatedUnreadCounts: Record<string, number> = {
+          ...(convRow?.unread_counts || {})
+        };
+
+        // Ensure sender's unread count is 0
+        updatedUnreadCounts[myUid] = 0;
+
+        // Increment ONLY other participants' unread count & create notification
+        for (const pid of participantIds) {
+          if (pid && pid !== myUid) {
+            updatedUnreadCounts[pid] = (typeof updatedUnreadCounts[pid] === 'number' ? updatedUnreadCounts[pid] : 0) + 1;
+            createNotification({
+              userId: pid,
+              actorId: myUid,
+              actorName: chatMsg.senderName,
+              type: 'message',
+              title: chatMsg.senderName || 'New message',
+              message: cleanText || (imageUrl ? 'Sent an image' : 'Sent a message'),
+              conversationId
+            }).catch(() => {});
+          }
+        }
+
+        await supabase.from('conversations').update({
+          last_message: cleanText || (imageUrl ? '📷 Photo' : ''),
+          last_message_at: new Date(now).toISOString(),
+          updated_at: new Date(now).toISOString(),
+          unread_counts: updatedUnreadCounts
+        }).eq('id', conversationId);
+      }
+
+      messageNewCallbacks.forEach((cb) => cb(chatMsg));
+      return chatMsg;
     } catch (err) {
       console.error('[useChatSocket] Send message error:', err);
       throw err;
     }
-
-    messageNewCallbacks.forEach((cb) => cb(chatMsg));
-    return chatMsg;
   };
 
   const markConversationAsRead = async (conversationId: string, uid: string) => {
     try {
-      await supabase.from('messages')
+      const { data } = await supabase
+        .from('conversations')
+        .select('unread_counts')
+        .eq('id', conversationId)
+        .maybeSingle();
+
+      const currentCounts: Record<string, number> = { ...(data?.unread_counts || {}) };
+      currentCounts[uid] = 0;
+
+      await supabase
+        .from('conversations')
+        .update({ unread_counts: currentCounts })
+        .eq('id', conversationId);
+
+      await supabase
+        .from('messages')
         .update({ read: true })
         .eq('conversation_id', conversationId)
         .neq('sender_id', uid);
-    } catch {}
+    } catch (err) {
+      console.warn('[useChatSocket] Mark as read warning:', err);
+    }
   };
 
   return {

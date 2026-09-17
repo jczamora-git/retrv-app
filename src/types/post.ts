@@ -44,6 +44,8 @@ export interface Post {
   resolvedAt?: number;
   resolvedBy?: string;
   meritRecipientId?: string | null;
+  clientRequestId?: string;
+  client_request_id?: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -62,6 +64,7 @@ export interface PostFormData {
   imagePath?: string | null;
   imageFile?: File | null;
   removeImage?: boolean;
+  clientRequestId?: string;
 }
 
 export type PostFormErrors = Partial<Record<keyof PostFormData, string>>;

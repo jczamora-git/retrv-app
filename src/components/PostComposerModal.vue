@@ -15,10 +15,12 @@
         <button
           type="button"
           class="header-post-btn"
-          :disabled="!isValid || submitting"
+          :class="{ 'retry-btn': submissionState === 'failed' }"
+          :disabled="!isValid || submissionState === 'sending'"
           @click="handleSubmit"
         >
-          <ion-spinner v-if="submitting" name="crescent" class="post-spinner" />
+          <ion-spinner v-if="submissionState === 'sending'" name="crescent" class="post-spinner" />
+          <span v-else-if="submissionState === 'failed'">Retry</span>
           <span v-else>Post</span>
         </button>
       </header>
@@ -183,7 +185,7 @@
 
 <script setup lang="ts">
 import { computed, onUnmounted, reactive, ref, watch } from "vue";
-import { IonModal, IonSpinner } from "@ionic/vue";
+import { IonModal, IonSpinner, toastController } from "@ionic/vue";
 import {
   MapPin,
   ImagePlus,
@@ -196,6 +198,8 @@ import PostCategoryFields from "./PostCategoryFields.vue";
 import CustomDatePicker from "./CustomDatePicker.vue";
 import UploadDebugBanner from "./UploadDebugBanner.vue";
 import { useAuth } from "../composables/useAuth";
+import { usePosts } from "../composables/usePosts";
+import { generateClientRequestId } from "../utils/idempotency";
 import { validateImageFile } from "../utils/fileValidation";
 import {
   type PostFormData,
@@ -216,10 +220,15 @@ const props = withDefaults(
 const emit = defineEmits<{
   (e: "close"): void;
   (e: "submit", data: PostFormData): void;
+  (e: "created", postId: string): void;
 }>();
 
 const { currentProfile } = useAuth();
-const submitting = ref(false);
+const { createPost } = usePosts();
+
+const submissionState = ref<"idle" | "sending" | "failed" | "sent">("idle");
+const activeClientRequestId = ref<string>(generateClientRequestId());
+const submitting = computed(() => submissionState.value === "sending");
 const formSession = ref(0);
 const fileInputRef = ref<HTMLInputElement | null>(null);
 const previewPhotoUrl = ref("");
@@ -235,6 +244,8 @@ const form = reactive<PostFormData>({
   location: "",
   eventDate: new Date().toISOString().split("T")[0],
   imageUrl: "",
+  imageKey: "",
+  imagePath: "",
   imageFile: null
 });
 
@@ -264,6 +275,8 @@ watch(
       if (previewPhotoUrl.value?.startsWith("blob:")) {
         URL.revokeObjectURL(previewPhotoUrl.value);
       }
+      submissionState.value = "idle";
+      activeClientRequestId.value = generateClientRequestId();
       form.type = props.initialType;
       form.title = "";
       form.category = "";
@@ -273,6 +286,8 @@ watch(
       form.location = "";
       form.eventDate = new Date().toISOString().split("T")[0];
       form.imageUrl = "";
+      form.imageKey = "";
+      form.imagePath = "";
       form.imageFile = null;
       previewPhotoUrl.value = "";
       photoError.value = "";
@@ -304,6 +319,7 @@ const onPhotoSelected = (event: Event) => {
   }
 
   form.imageFile = file;
+  form.imageUrl = "";
   previewPhotoUrl.value = URL.createObjectURL(file);
   photoError.value = "";
 };
@@ -313,6 +329,8 @@ const removePhoto = () => {
     URL.revokeObjectURL(previewPhotoUrl.value);
   }
   form.imageFile = null;
+  form.imageUrl = "";
+  form.imageKey = "";
   previewPhotoUrl.value = "";
   photoError.value = "";
   if (fileInputRef.value) fileInputRef.value.value = "";
@@ -353,24 +371,55 @@ const validate = (): boolean => {
 };
 
 const handleSubmit = async () => {
-  if (submitting.value || !validate()) return;
-  submitting.value = true;
+  if (submissionState.value === "sending" || !validate()) return;
+  submissionState.value = "sending";
+
   try {
-    // Never save local blob: URLs to database
     const validRemoteImageUrl =
       form.imageUrl && !form.imageUrl.startsWith("blob:") ? form.imageUrl.trim() : null;
 
-    emit("submit", {
+    const payload: PostFormData = {
       ...form,
       imageUrl: validRemoteImageUrl,
-      imageFile: form.imageFile || null
+      imageFile: form.imageFile || null,
+      clientRequestId: activeClientRequestId.value
+    };
+
+    const newPostId = await createPost(payload);
+    submissionState.value = "sent";
+
+    // If an image was uploaded, cache it locally
+    if (payload.imageUrl) {
+      form.imageUrl = payload.imageUrl;
+      form.imageFile = null;
+    }
+
+    const toast = await toastController.create({
+      message: `${form.type === 'found' ? 'Found' : 'Lost'} report posted successfully!`,
+      duration: 2500,
+      position: "top",
+      color: "success"
     });
-  } finally {
-    submitting.value = false;
+    await toast.present();
+
+    emit("submit", payload);
+    emit("created", newPostId);
+    emit("close");
+  } catch (err: any) {
+    console.error("[PostComposerModal] Post creation failed:", err);
+    submissionState.value = "failed";
+    const toast = await toastController.create({
+      message: err?.message || "Failed to publish post. Tap Retry to try again.",
+      duration: 3500,
+      position: "top",
+      color: "danger"
+    });
+    await toast.present();
   }
 };
 
 const handleClose = () => {
+  if (submissionState.value === "sending") return;
   emit("close");
 };
 </script>

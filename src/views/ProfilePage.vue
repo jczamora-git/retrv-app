@@ -183,7 +183,7 @@ import type { PostFormData } from "../types/post";
 
 const router = useRouter();
 const { currentProfile } = useAuth();
-const { posts, toggleHelpful, isHelpfulByMe, createPost } = usePosts();
+const { posts, toggleHelpful, isHelpfulByMe, fetchPosts } = usePosts();
 const { loadAchievementsForUser } = useAchievements();
 
 const targetProfileId = computed(() => (currentAppUserId.value || currentProfile.value?.id || "").trim());
@@ -226,26 +226,9 @@ const filteredMyPosts = computed(() => {
   return myPosts.value;
 });
 
-const handleCreate = async (data: PostFormData) => {
-  try {
-    await createPost(data);
-    showComposer.value = false;
-    const toast = await toastController.create({
-      message: "Post created successfully!",
-      duration: 2500,
-      position: "top",
-      color: "success"
-    });
-    await toast.present();
-  } catch (err: any) {
-    const toast = await toastController.create({
-      message: err.message || "Failed to create post.",
-      duration: 3000,
-      position: "top",
-      color: "danger"
-    });
-    await toast.present();
-  }
+const handleCreate = () => {
+  showComposer.value = false;
+  fetchPosts({ isRefresh: true });
 };
 </script>
 

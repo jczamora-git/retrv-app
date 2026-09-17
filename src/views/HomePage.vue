@@ -453,30 +453,8 @@ const openCreateComposer = () => {
   showComposer.value = true;
 };
 
-const handleDirectCreate = async (data: PostFormData) => {
-  if (publishingPost.value) return;
-  publishingPost.value = true;
-  try {
-    await createPost(data);
-    showComposer.value = false;
-    const toast = await toastController.create({
-      message: "Post created successfully!",
-      duration: 2500,
-      position: "top",
-      color: "success"
-    });
-    await toast.present();
-  } catch (err: any) {
-    const toast = await toastController.create({
-      message: err.message || "Failed to create post.",
-      duration: 3000,
-      position: "top",
-      color: "danger"
-    });
-    await toast.present();
-  } finally {
-    publishingPost.value = false;
-  }
+const handleDirectCreate = () => {
+  showComposer.value = false;
 };
 </script>
 

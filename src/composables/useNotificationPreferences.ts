@@ -26,6 +26,8 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
   postUpdates: true
 };
 
+import { checkPushPermission, requestPushPermission as requestPushPermissionService } from '../services/pushNotificationService';
+
 const preferences = ref<NotificationPreferences>({ ...DEFAULT_NOTIFICATION_PREFERENCES });
 const loading = ref(false);
 const saving = ref(false);
@@ -37,50 +39,17 @@ export function useNotificationPreferences() {
   const isMasterEnabled = computed(() => preferences.value.enabled);
 
   const checkDevicePermission = async () => {
-    if (typeof window === 'undefined') return;
-
-    if ('Notification' in window) {
-      devicePermission.value = Notification.permission;
-    } else {
-      // In native Capacitor context
-      devicePermission.value = 'default';
-    }
+    devicePermission.value = await checkPushPermission();
   };
 
   const requestDevicePermission = async (): Promise<boolean> => {
-    const platform = Capacitor.getPlatform();
+    const session = await getSessionUser();
+    const uid = session?.uid || sessionUid.value;
+    if (!uid) return false;
 
-    if (platform === 'web' && typeof window !== 'undefined' && 'Notification' in window) {
-      try {
-        const result = await Notification.requestPermission();
-        devicePermission.value = result;
-        return result === 'granted';
-      } catch (err) {
-        console.warn('[useNotificationPreferences] Request permission error:', err);
-      }
-    } else if (platform === 'android') {
-      try {
-        await NativeSettings.openAndroid({ option: AndroidSettings.AppNotification });
-        return true;
-      } catch {
-        try {
-          await NativeSettings.openAndroid({ option: AndroidSettings.ApplicationDetails });
-          return true;
-        } catch {}
-      }
-    } else if (platform === 'ios') {
-      try {
-        await NativeSettings.openIOS({ option: IOSSettings.AppNotification });
-        return true;
-      } catch {
-        try {
-          await NativeSettings.openIOS({ option: IOSSettings.App });
-          return true;
-        } catch {}
-      }
-    }
-
-    return false;
+    const granted = await requestPushPermissionService(uid);
+    await checkDevicePermission();
+    return granted;
   };
 
   const loadPreferences = async (userId?: string) => {

@@ -62,6 +62,7 @@ import { IonSpinner } from "@ionic/vue";
 import { SendHorizontal, Reply, X } from "lucide-vue-next";
 import UserAvatar from "./UserAvatar.vue";
 import { useAuth } from "../composables/useAuth";
+import { generateClientRequestId } from "../utils/idempotency";
 
 export interface ReplyTarget {
   commentId: string;
@@ -76,13 +77,14 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: "submit-comment", content: string): void;
+  (e: "submit-comment", content: string, clientRequestId?: string): void;
   (e: "cancel-reply"): void;
 }>();
 
 const { currentProfile } = useAuth();
 const text = ref("");
 const submitting = ref(false);
+const activeClientRequestId = ref<string>(generateClientRequestId());
 const inputRef = ref<HTMLInputElement | null>(null);
 
 const composerPlaceholder = computed(() => {
@@ -102,9 +104,11 @@ const handleSend = () => {
   const content = text.value.trim();
   if (!content || submitting.value) return;
 
+  const reqId = activeClientRequestId.value;
   submitting.value = true;
-  emit("submit-comment", content);
+  emit("submit-comment", content, reqId);
   text.value = "";
+  activeClientRequestId.value = generateClientRequestId();
   submitting.value = false;
 };
 

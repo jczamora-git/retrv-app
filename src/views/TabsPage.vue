@@ -61,30 +61,8 @@ const openCreateComposer = () => {
   showComposer.value = true;
 };
 
-const handlePostSubmit = async (formData: PostFormData) => {
-  try {
-    await createPost(formData);
-    showComposer.value = false;
-
-    const toast = await toastController.create({
-      message: `${formData.type === 'found' ? 'Found' : 'Lost'} report posted successfully!`,
-      duration: 2500,
-      position: "top",
-      color: "success"
-    });
-    await toast.present();
-
-    // Navigate to home feed if not already there
-    router.push("/tabs/home");
-  } catch (err: any) {
-    console.error("Failed to create post:", err);
-    const toast = await toastController.create({
-      message: err.message || "Failed to publish post.",
-      duration: 3000,
-      position: "top",
-      color: "danger"
-    });
-    await toast.present();
-  }
+const handlePostSubmit = () => {
+  showComposer.value = false;
+  router.push("/tabs/home");
 };
 </script>

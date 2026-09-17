@@ -13,6 +13,7 @@ import type {
 } from "../types/post";
 import { getCategoryConfig, normalizeCategoryKey } from "../config/categories";
 import { resolveCustomSubcategory, type ResolvedCustomSubcategory } from "./useCategories";
+import { idempotentInsert, generateClientRequestId } from "../utils/idempotency";
 
 const posts = ref<Post[]>([]);
 const postsLoading = ref(false);
@@ -51,6 +52,8 @@ const mapPostRow = (row: any): Post => {
     resolvedAt: row.resolved_at ? (typeof row.resolved_at === "number" ? row.resolved_at : new Date(row.resolved_at).getTime()) : undefined,
     resolvedBy: row.resolved_by || row.resolvedBy || undefined,
     meritRecipientId: row.merit_recipient_id || row.meritRecipientId || null,
+    clientRequestId: row.client_request_id || row.clientRequestId || undefined,
+    client_request_id: row.client_request_id || row.clientRequestId || undefined,
     createdAt: row.created_at ? (typeof row.created_at === "number" ? row.created_at : new Date(row.created_at).getTime()) : Date.now(),
     updatedAt: row.updated_at ? (typeof row.updated_at === "number" ? row.updated_at : new Date(row.updated_at).getTime()) : Date.now()
   };
@@ -167,6 +170,8 @@ export function usePosts() {
       throw new Error("You must complete your profile first.");
     }
 
+    const clientReqId = data.clientRequestId || generateClientRequestId();
+
     let finalImageUrl: string | null = null;
     let finalImageKey: string | null = null;
 
@@ -174,6 +179,10 @@ export function usePosts() {
       const uploadRes = await uploadPostImage(data.imageFile);
       finalImageUrl = uploadRes.url;
       finalImageKey = uploadRes.key;
+      // Cache uploaded image info on the form data object so retries won't re-upload
+      data.imageUrl = finalImageUrl;
+      data.imageKey = finalImageKey;
+      data.imageFile = null;
     } else if (data.imageUrl && !data.imageUrl.startsWith("blob:")) {
       finalImageUrl = data.imageUrl.trim();
       finalImageKey = data.imageKey || null;
@@ -214,19 +223,20 @@ export function usePosts() {
       location: data.location.trim(),
       photos: finalImageUrl ? [finalImageUrl] : [],
       status: "open",
+      client_request_id: clientReqId,
       created_at: now,
       updated_at: now
     };
 
-    const { error } = await supabase.from("posts").insert(newPostRecord);
-    if (error) {
-      console.error("[usePosts] Create post error:", error);
-      throw error;
-    }
+    const insertResult = await idempotentInsert('posts', newPostRecord, {
+      userColumn: 'author_id',
+      userId: currentProfile.value.id,
+      clientRequestId: clientReqId
+    });
 
     // Refresh local state
     await fetchPosts({ isRefresh: true });
-    return postId;
+    return insertResult.data?.id || postId;
   };
 
   const updatePost = async (postId: string, data: Partial<PostFormData>) => {

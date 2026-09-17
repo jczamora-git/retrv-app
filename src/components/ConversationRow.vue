@@ -42,7 +42,7 @@
 import { computed } from 'vue';
 import UserAvatar from './UserAvatar.vue';
 import AchievementBadge from './AchievementBadge.vue';
-import { sessionUid } from '../composables/useAuth';
+import { currentAppUserId, sessionUid } from '../composables/useAuth';
 import type { ConversationWithMeta } from '../types/conversation';
 
 const props = defineProps<{
@@ -54,7 +54,7 @@ defineEmits<{
 }>();
 
 const unreadCount = computed<number>(() => {
-  const uid = sessionUid.value;
+  const uid = currentAppUserId.value || sessionUid.value;
   if (
     uid &&
     props.conversation.unreadCounts &&
@@ -62,7 +62,11 @@ const unreadCount = computed<number>(() => {
   ) {
     return props.conversation.unreadCounts[uid];
   }
-  return props.conversation.unreadCount || (props.conversation.unread ? 1 : 0);
+  return typeof props.conversation.unreadCount === 'number'
+    ? props.conversation.unreadCount
+    : props.conversation.unread
+    ? 1
+    : 0;
 });
 
 const relativeTime = computed(() => {

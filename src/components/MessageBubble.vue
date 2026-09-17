@@ -36,8 +36,19 @@
         <!-- Optional Text Caption / Content -->
         <p v-if="message.text" class="bubble-text">{{ message.text }}</p>
 
-        <!-- Timestamp -->
-        <span class="bubble-time">{{ formattedTime }}</span>
+        <!-- Timestamp & Status -->
+        <div class="bubble-meta-row">
+          <span class="bubble-time">{{ formattedTime }}</span>
+          <span v-if="isOwn && message.status === 'sending'" class="bubble-status-tag status-sending">Sending...</span>
+          <button
+            v-else-if="isOwn && message.status === 'failed'"
+            type="button"
+            class="bubble-status-tag status-failed"
+            @click.stop="$emit('retry', message)"
+          >
+            Failed · Retry
+          </button>
+        </div>
       </div>
 
       <!-- Quick Reply Action Button -->
@@ -94,6 +105,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'reply', message: ChatMessage): void;
+  (e: 'retry', message: ChatMessage): void;
 }>();
 
 const showViewer = ref(false);
@@ -332,6 +344,37 @@ const formattedTime = computed(() => {
   to {
     opacity: 1;
   }
+}
+
+.bubble-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.bubble-status-tag {
+  font-size: 10px;
+  font-weight: 600;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: default;
+}
+
+.bubble-status-tag.status-sending {
+  color: var(--app-text-tertiary, #94a3b8);
+  font-style: italic;
+}
+
+.bubble-status-tag.status-failed {
+  color: #ef4444;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.bubble-status-tag.status-failed:hover {
+  color: #dc2626;
 }
 </style>
 

@@ -39,7 +39,7 @@
         <div class="dock-icon-box relative-icon-box">
           <MessageCircle :size="20" :stroke-width="currentTab === 'messages' ? 2.3 : 1.9" class="dock-icon" />
           <span
-            v-if="totalUnreadCount > 0"
+            v-if="messageUnreadCount > 0"
             class="dock-unread-badge"
             aria-label="Unread messages count"
           >
@@ -69,7 +69,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { House, Plus, MessageCircle, UserRound } from "lucide-vue-next";
-import { useConversations } from "../composables/useConversations";
+import { useMessageUnread } from "../composables/useMessageUnread";
 
 withDefaults(
   defineProps<{
@@ -85,12 +85,12 @@ defineEmits<{
   "open-create": [];
 }>();
 
-const { totalUnreadCount } = useConversations();
+const { messageUnreadCount } = useMessageUnread();
 
 const totalUnreadFormatted = computed(() => {
-  if (totalUnreadCount.value <= 0) return "";
-  if (totalUnreadCount.value > 99) return "99+";
-  return String(totalUnreadCount.value);
+  if (messageUnreadCount.value <= 0) return "";
+  if (messageUnreadCount.value > 99) return "99+";
+  return String(messageUnreadCount.value);
 });
 </script>
 
