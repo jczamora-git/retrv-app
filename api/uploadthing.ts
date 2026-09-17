@@ -92,6 +92,7 @@ const uploadRouteHandler = createRouteHandler({
 });
 
 const ALLOWED_ORIGINS = [
+  'https://retrv-app.vercel.app',
   'https://ioniclostandfound.vercel.app',
   'capacitor://localhost',
   'http://localhost',

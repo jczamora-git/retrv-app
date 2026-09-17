@@ -22,7 +22,7 @@ export const MAX_MESSAGE_IMAGE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
 
 const API_BASE =
   import.meta.env.VITE_API_SERVER_URL ||
-  'https://ioniclostandfound.vercel.app';
+  'https://retrv-app.vercel.app';
 
 // Remove Android production fallbacks to localhost / 127.0.0.1 / 192.168.* / :3000
 const sanitizedApiBase =
@@ -30,7 +30,7 @@ const sanitizedApiBase =
   API_BASE.includes('127.0.0.1') ||
   API_BASE.includes('192.168.') ||
   API_BASE.includes(':3000')
-    ? 'https://ioniclostandfound.vercel.app'
+    ? 'https://retrv-app.vercel.app'
     : API_BASE.trim().replace(/\/+$/, '');
 
 const uploadthingUrl = `${sanitizedApiBase}/api/uploadthing`;

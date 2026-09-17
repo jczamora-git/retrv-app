@@ -8,7 +8,7 @@ const rawServerUrl =
 export const SERVER_URL: string =
   rawServerUrl && rawServerUrl.trim() !== ''
     ? rawServerUrl.trim().replace(/\/+$/, '')
-    : 'https://ioniclostandfound.vercel.app';
+    : 'https://retrv-app.vercel.app';
 
 if (import.meta.env.DEV) {
   console.log('[API Server Config]', SERVER_URL);

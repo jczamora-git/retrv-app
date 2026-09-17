@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 
 const defaultAllowedOrigins = [
+  'https://retrv-app.vercel.app',
   'https://ioniclostandfound.vercel.app',
   'http://localhost:5173',
   'http://localhost:8100',
