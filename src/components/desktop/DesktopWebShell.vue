@@ -1,7 +1,7 @@
 <template>
   <div
     class="desktop-web-shell"
-    :class="{ 'is-messages-route': currentTab === 'messages' }"
+    :class="{ 'is-messages-route': isMessagesRoute }"
   >
     <!-- Sticky Desktop Header (Visible on all routes) -->
     <header class="desktop-header-wrap">
@@ -33,22 +33,22 @@
       aria-hidden="true"
     ></div>
 
-    <!-- Desktop Content Area (Offset past left nav when sidebar is visible; Full-width when no sidebar) -->
+    <!-- Desktop Content Area (Offset past fixed left nav + divider) -->
     <div
       class="desktop-content-area"
       :class="{
-        'is-messages-tab': currentTab === 'messages',
+        'is-messages-tab': isMessagesRoute,
         'no-sidebar': !showNavSidebar
       }"
     >
       <!-- Center Main Column -->
       <main
         class="desktop-main-column"
-        :class="{ 'full-width': currentTab === 'messages' || !showNavSidebar || !showContextRail }"
+        :class="{ 'full-width': isMessagesRoute || !showNavSidebar }"
       >
         <div
           class="desktop-main-viewport"
-          :class="{ 'full-width': currentTab === 'messages' || !showNavSidebar || !showContextRail }"
+          :class="{ 'full-width': isMessagesRoute || !showNavSidebar }"
         >
           <slot />
         </div>
@@ -56,7 +56,7 @@
 
       <!-- Right Supporting Context Rail (Sticky, Hidden on Messages & Profile) -->
       <aside
-        v-if="showContextRail && currentTab !== 'messages' && currentTab !== 'profile'"
+        v-if="showContextRail && isHomeRoute"
         class="desktop-context-column"
       >
         <slot name="context-rail">
@@ -69,9 +69,12 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
+import { useRoute } from "vue-router";
 import DesktopHeader from "./DesktopHeader.vue";
 import DesktopNavSidebar from "./DesktopNavSidebar.vue";
 import DesktopContextRail from "./DesktopContextRail.vue";
+
+const route = useRoute();
 
 const props = withDefaults(
   defineProps<{
@@ -83,7 +86,8 @@ const props = withDefaults(
   {
     currentTab: "home",
     unreadCount: 0,
-    showContextRail: true
+    showContextRail: true,
+    showSidebar: true
   }
 );
 
@@ -93,9 +97,30 @@ const emit = defineEmits<{
   "open-notifications": [];
 }>();
 
+const isMessagesRoute = computed(() => {
+  return route.name === "Messages" || route.path.startsWith("/messages") || props.currentTab === "messages";
+});
+
+const isProfileRoute = computed(() => {
+  return route.name === "Profile" || route.path.startsWith("/profile") || props.currentTab === "profile";
+});
+
+const isNotificationsRoute = computed(() => {
+  return route.name === "Notifications" || route.path.startsWith("/notifications") || props.currentTab === "notifications";
+});
+
+const hideDesktopNav = computed(() => {
+  return isMessagesRoute.value || isProfileRoute.value;
+});
+
 const showNavSidebar = computed(() => {
-  if (props.showSidebar !== undefined) return props.showSidebar;
-  return props.currentTab !== "messages" && props.currentTab !== "profile";
+  if (!props.showSidebar) return false;
+  return !hideDesktopNav.value;
+});
+
+const isHomeRoute = computed(() => {
+  if (hideDesktopNav.value || isNotificationsRoute.value) return false;
+  return route.name === "Home" || route.path === "/" || props.currentTab === "home";
 });
 </script>
 

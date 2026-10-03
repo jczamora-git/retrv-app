@@ -738,4 +738,13 @@ const handleMessageUser = async () => {
 .dock-spacer {
   height: 20px;
 }
+
+.public-profile-root-page {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  contain: none !important;
+  background: var(--app-bg);
+}
 </style>

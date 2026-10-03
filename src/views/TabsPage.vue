@@ -1,51 +1,49 @@
 <template>
-  <ion-page class="tabs-root-page">
-    <!-- DESKTOP WEB SHELL (>= 1200px) -->
-    <DesktopWebShell
-      v-if="isDesktop"
-      :current-tab="currentTab"
-      :unread-count="unreadCount"
-      :show-context-rail="currentTab === 'home'"
-      @select-tab="handleSelectTab"
-      @open-create="openCreateComposer"
-      @open-notifications="showNotificationsModal = true"
-    >
-      <DesktopHomePage v-if="currentTab === 'home'" />
-      <DesktopMessagesPage v-else-if="currentTab === 'messages'" />
-      <DesktopProfilePage v-else-if="currentTab === 'profile'" />
-      <DesktopNotificationsPage v-else-if="currentTab === 'notifications'" />
-    </DesktopWebShell>
+  <!-- DESKTOP WEB SHELL (>= 1200px) -->
+  <DesktopWebShell
+    v-if="isDesktop"
+    :current-tab="currentTab"
+    :unread-count="unreadCount"
+    :show-context-rail="currentTab === 'home'"
+    @select-tab="handleSelectTab"
+    @open-create="openCreateComposer"
+    @open-notifications="showNotificationsModal = true"
+  >
+    <DesktopHomePage v-if="currentTab === 'home'" />
+    <DesktopMessagesPage v-else-if="currentTab === 'messages'" />
+    <DesktopProfilePage v-else-if="currentTab === 'profile'" />
+    <DesktopNotificationsPage v-else-if="currentTab === 'notifications'" />
+  </DesktopWebShell>
 
-    <!-- MOBILE / TABLET IONIC SHELL (< 1200px) -->
-    <div v-else class="mobile-app-shell">
-      <ion-tabs class="mobile-tabs-container">
-        <ion-router-outlet />
+  <!-- MOBILE / TABLET IONIC SHELL (< 1200px) -->
+  <ion-page v-else class="mobile-app-shell">
+    <ion-tabs class="mobile-tabs-container">
+      <ion-router-outlet />
 
-        <!-- Mobile & Tablet Bottom Navigation Dock (< 1200px) -->
-        <AppDock
-          class="mobile-only-dock"
-          :current-tab="currentTab"
-          @select-tab="handleSelectTab"
-          @open-create="openCreateComposer"
-        />
-      </ion-tabs>
-    </div>
-
-    <!-- Shared Post Composer Modal (Used everywhere: Mobile, Tablet, Desktop) -->
-    <PostComposerModal
-      :is-open="showComposer"
-      :initial-type="selectedType"
-      @close="showComposer = false"
-      @submit="handlePostSubmit"
-    />
-
-    <!-- Mobile & Tablet Notifications Sheet Modal (< 1200px only) -->
-    <NotificationsModal
-      v-if="!isDesktop"
-      :is-open="showNotificationsModal"
-      @close="showNotificationsModal = false"
-    />
+      <!-- Mobile & Tablet Bottom Navigation Dock (< 1200px) -->
+      <AppDock
+        class="mobile-only-dock"
+        :current-tab="currentTab"
+        @select-tab="handleSelectTab"
+        @open-create="openCreateComposer"
+      />
+    </ion-tabs>
   </ion-page>
+
+  <!-- Shared Post Composer Modal (Used everywhere: Mobile, Tablet, Desktop) -->
+  <PostComposerModal
+    :is-open="showComposer"
+    :initial-type="selectedType"
+    @close="showComposer = false"
+    @submit="handlePostSubmit"
+  />
+
+  <!-- Mobile & Tablet Notifications Sheet Modal (< 1200px only) -->
+  <NotificationsModal
+    v-if="!isDesktop"
+    :is-open="showNotificationsModal"
+    @close="showNotificationsModal = false"
+  />
 </template>
 
 <script setup lang="ts">
@@ -140,7 +138,8 @@ const handlePostSubmit = () => {
   position: relative;
   width: 100%;
   height: 100%;
-  overflow: hidden;
+  overflow: visible;
+  contain: none !important;
   background: var(--app-bg);
 }
 

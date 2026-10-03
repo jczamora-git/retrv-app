@@ -266,7 +266,35 @@ Any change affecting one of the following primary domains MUST explicitly list a
 
 ---
 
-## 16. Agent Stop Conditions
+## 16. Desktop Web Architecture Guardrails
+
+For any task touching:
+- `DesktopWebShell.vue`
+- `DesktopHeader.vue`
+- `DesktopNavSidebar.vue`
+- `DesktopContextRail.vue`
+- `TabsPage.vue`
+- `src/router/index.ts`
+- Any desktop page view (`src/views/desktop/Desktop*Page.vue`)
+- Any new desktop feature (`>= 1200px`)
+
+Agents **MUST READ FIRST**:
+1. [docs/desktop/DESKTOP-SHELL.md](file:///c:/Users/JC%20Zamora/Documents/retrv-app/docs/desktop/DESKTOP-SHELL.md)
+2. [docs/desktop/DESKTOP-ROUTES.md](file:///c:/Users/JC%20Zamora/Documents/retrv-app/docs/desktop/DESKTOP-ROUTES.md)
+3. [docs/desktop/DESKTOP-PAGES.md](file:///c:/Users/JC%20Zamora/Documents/retrv-app/docs/desktop/DESKTOP-PAGES.md)
+4. [docs/desktop/DESKTOP-CHECKLIST.md](file:///c:/Users/JC%20Zamora/Documents/retrv-app/docs/desktop/DESKTOP-CHECKLIST.md)
+
+### Core Desktop Invariants:
+1. **Single Canonical Sidebar:** Never recreate `DesktopNavSidebar.vue`. Exactly ONE canonical sidebar exists.
+2. **Visible by Default:** `DesktopNavSidebar` MUST remain visible by default across all desktop routes. Only explicit routes (Messages, Profile) opt out.
+3. **Boolean Prop Defaults:** In Vue 3, any boolean prop controlling visibility (`showSidebar?: boolean`) must explicitly specify `default: true` in `withDefaults`.
+4. **Pure Vue Desktop Views:** Desktop pages (`src/views/desktop/`) must use standard semantic HTML/Vue and MUST NOT be wrapped in Ionic layout primitives (`IonPage`, `IonContent`, `IonTabs`).
+5. **No `/tabs/` Navigations:** Active app navigation must use clean canonical named routes (`router.push({ name: "Home" })`). `/tabs/...` routes are legacy redirects only.
+6. **No Layout Hacks:** Never mask missing sidebar regressions with compensatory `margin-left` or fake column hacks.
+
+---
+
+## 17. Agent Stop Conditions
 
 An agent MUST stop, make no destructive edits, and ask for user clarification when:
 1. Active database schema differs materially from documentation.
@@ -278,7 +306,7 @@ An agent MUST stop, make no destructive edits, and ask for user clarification wh
 
 ---
 
-## 17. No Automatic Phase Advancement
+## 18. No Automatic Phase Advancement
 
 - **Completing Phase 0 does NOT authorize starting Phase 1.**
 - **Completing Phase 1 does NOT authorize starting Phase 2.**

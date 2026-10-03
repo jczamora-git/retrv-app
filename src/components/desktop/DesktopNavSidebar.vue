@@ -8,12 +8,12 @@
           <button
             type="button"
             class="sidebar-nav-link"
-            :class="{ active: currentTab === 'home' }"
-            :aria-current="currentTab === 'home' ? 'page' : undefined"
+            :class="{ active: isHomeActive }"
+            :aria-current="isHomeActive ? 'page' : undefined"
             @click="handleNav('home')"
           >
             <div class="nav-icon-wrap">
-              <House :size="20" :stroke-width="currentTab === 'home' ? 2.3 : 1.9" />
+              <House :size="20" :stroke-width="isHomeActive ? 2.3 : 1.9" />
             </div>
             <span class="nav-link-label">Home</span>
           </button>
@@ -24,12 +24,12 @@
           <button
             type="button"
             class="sidebar-nav-link"
-            :class="{ active: currentTab === 'messages' }"
-            :aria-current="currentTab === 'messages' ? 'page' : undefined"
+            :class="{ active: isMessagesActive }"
+            :aria-current="isMessagesActive ? 'page' : undefined"
             @click="handleNav('messages')"
           >
             <div class="nav-icon-wrap relative-icon">
-              <MessageCircle :size="20" :stroke-width="currentTab === 'messages' ? 2.3 : 1.9" />
+              <MessageCircle :size="20" :stroke-width="isMessagesActive ? 2.3 : 1.9" />
               <span
                 v-if="messageUnreadCount > 0"
                 class="sidebar-unread-dot"
@@ -51,12 +51,12 @@
           <button
             type="button"
             class="sidebar-nav-link"
-            :class="{ active: currentTab === 'profile' }"
-            :aria-current="currentTab === 'profile' ? 'page' : undefined"
+            :class="{ active: isProfileActive }"
+            :aria-current="isProfileActive ? 'page' : undefined"
             @click="handleNav('profile')"
           >
             <div class="nav-icon-wrap">
-              <UserRound :size="20" :stroke-width="currentTab === 'profile' ? 2.3 : 1.9" />
+              <UserRound :size="20" :stroke-width="isProfileActive ? 2.3 : 1.9" />
             </div>
             <span class="nav-link-label">Profile</span>
           </button>
@@ -144,7 +144,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import {
   House,
   MessageCircle,
@@ -160,7 +160,7 @@ import { useMessageUnread } from "../../composables/useMessageUnread";
 
 const INITIAL_CATEGORY_COUNT = 7;
 
-withDefaults(
+const props = withDefaults(
   defineProps<{
     currentTab?: "home" | "messages" | "profile" | "notifications";
   }>(),
@@ -173,11 +173,24 @@ const emit = defineEmits<{
   "select-tab": [tab: "home" | "messages" | "profile"];
 }>();
 
+const route = useRoute();
 const router = useRouter();
 const { messageUnreadCount } = useMessageUnread();
 const { appliedFilters, isCategorySelected, toggleCategory } = useFeedFilter();
 
 const isExpanded = ref(false);
+
+const isHomeActive = computed(() => {
+  return route?.name === "Home" || route?.path === "/" || props.currentTab === "home";
+});
+
+const isMessagesActive = computed(() => {
+  return route?.name === "Messages" || route?.path?.startsWith("/messages") || props.currentTab === "messages";
+});
+
+const isProfileActive = computed(() => {
+  return route?.name === "Profile" || route?.path?.startsWith("/profile") || props.currentTab === "profile";
+});
 
 const visibleCategories = computed(() => {
   if (isExpanded.value) return MAIN_CATEGORIES;
@@ -201,7 +214,7 @@ const handleMapsClick = () => {
 
 const handleCategoryClick = (categoryName: string) => {
   toggleCategory(categoryName);
-  if (router.currentRoute.value.name !== "Home" && router.currentRoute.value.path !== "/") {
+  if (route?.name !== "Home" && route?.path !== "/") {
     router.push({ name: "Home" });
   }
 };
