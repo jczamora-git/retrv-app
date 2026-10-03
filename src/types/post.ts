@@ -10,6 +10,22 @@ export const POST_CATEGORIES = CATEGORY_NAMES;
 
 export type PostCategory = string;
 
+export const POSTS_PAGE_SIZE = 12;
+
+export interface PostCursor {
+  createdAt: string;
+  id: string;
+}
+
+export interface FetchPostsOptions {
+  limit?: number;
+  filter?: PostFilter;
+  search?: string;
+  categories?: string[];
+  subcategories?: string[];
+  isRefresh?: boolean;
+}
+
 export interface AdvancedFilterOptions {
   categories?: string[];
   subcategories?: string[];
@@ -47,6 +63,7 @@ export interface Post {
   clientRequestId?: string;
   client_request_id?: string;
   createdAt: number;
+  createdAtIso?: string;
   updatedAt: number;
 }
 

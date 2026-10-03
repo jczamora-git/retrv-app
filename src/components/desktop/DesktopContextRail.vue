@@ -1,7 +1,7 @@
 <template>
-  <aside class="desktop-right-rail-root" aria-label="Supporting Information">
+  <aside class="desktop-context-rail-root" aria-label="Supporting Information">
     <!-- Posts Near You Placeholder Surface -->
-    <div class="right-rail-card">
+    <div class="context-rail-card">
       <div class="rail-card-header">
         <div class="rail-title-row">
           <Compass :size="18" class="rail-header-icon" aria-hidden="true" />
@@ -27,7 +27,7 @@
     </div>
 
     <!-- Community Recovery Tips Card -->
-    <div class="right-rail-card tips-card">
+    <div class="context-rail-card tips-card">
       <div class="rail-card-header">
         <div class="rail-title-row">
           <Sparkles :size="17" class="rail-tips-icon" aria-hidden="true" />
@@ -58,7 +58,7 @@ import { Compass, MapPin, Sparkles } from "lucide-vue-next";
 </script>
 
 <style scoped>
-.desktop-right-rail-root {
+.desktop-context-rail-root {
   width: 100%;
   flex-shrink: 0;
   display: flex;
@@ -68,7 +68,7 @@ import { Compass, MapPin, Sparkles } from "lucide-vue-next";
   user-select: none;
 }
 
-.right-rail-card {
+.context-rail-card {
   background: var(--app-surface);
   border: 1px solid var(--app-border);
   border-radius: 16px;

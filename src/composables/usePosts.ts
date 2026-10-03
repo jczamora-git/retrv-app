@@ -2,14 +2,17 @@ import { ref } from "vue";
 import { supabase } from "../utils/supabase";
 import { useAuth } from "./useAuth";
 import { useImageUpload } from "./useImageUpload";
-import type {
-  Post,
-  PostCategory,
-  PostFilter,
-  PostFormData,
-  PostStatus,
-  PostType,
-  AdvancedFilterOptions
+import {
+  POSTS_PAGE_SIZE,
+  type Post,
+  type PostCategory,
+  type PostCursor,
+  type PostFilter,
+  type PostFormData,
+  type PostStatus,
+  type PostType,
+  type FetchPostsOptions,
+  type AdvancedFilterOptions
 } from "../types/post";
 import { getCategoryConfig, normalizeCategoryKey } from "../config/categories";
 import { resolveCustomSubcategory, type ResolvedCustomSubcategory } from "./useCategories";
@@ -18,9 +21,15 @@ import { idempotentInsert, generateClientRequestId } from "../utils/idempotency"
 const posts = ref<Post[]>([]);
 const postsLoading = ref(false);
 const postsRefreshing = ref(false);
+const postsLoadingMore = ref(false);
+const postsHasMore = ref(true);
 const postsError = ref("");
+const postsLoadMoreError = ref("");
+const currentCursor = ref<PostCursor | null>(null);
 const myHelpfulMap = ref<Record<string, boolean>>({});
 
+let currentQueryToken = 0;
+let activeFilterState: FetchPostsOptions = {};
 let inFlightPostsPromise: Promise<Post[]> | null = null;
 let realtimeChannelSubscribed = false;
 
@@ -55,8 +64,119 @@ const mapPostRow = (row: any): Post => {
     clientRequestId: row.client_request_id || row.clientRequestId || undefined,
     client_request_id: row.client_request_id || row.clientRequestId || undefined,
     createdAt: row.created_at ? (typeof row.created_at === "number" ? row.created_at : new Date(row.created_at).getTime()) : Date.now(),
+    createdAtIso: typeof row.created_at === "string" ? row.created_at : new Date(row.created_at || Date.now()).toISOString(),
     updatedAt: row.updated_at ? (typeof row.updated_at === "number" ? row.updated_at : new Date(row.updated_at).getTime()) : Date.now()
   };
+};
+
+const buildPostsQuery = (
+  options: FetchPostsOptions,
+  cursor: PostCursor | null,
+  limitCount: number
+) => {
+  let query = supabase.from("posts").select("*");
+
+  // Server-side type / status filter
+  if (options.filter === "Lost") {
+    query = query.eq("type", "lost");
+  } else if (options.filter === "Found") {
+    query = query.eq("type", "found");
+  } else if (options.filter === "Resolved") {
+    query = query.in("status", ["resolved", "returned", "claimed"]);
+  }
+
+  // Server-side category filter
+  if (options.categories && options.categories.length > 0) {
+    query = query.in("category", options.categories);
+  }
+
+  // Server-side subcategory filter
+  if (options.subcategories && options.subcategories.length > 0) {
+    query = query.in("subcategory", options.subcategories);
+  }
+
+  // Server-side keyword search filter (title, description, location)
+  if (options.search && options.search.trim()) {
+    const cleanTerm = options.search.trim().replace(/[%_,'"()]/g, "");
+    if (cleanTerm.length > 0) {
+      query = query.or(
+        `title.ilike.%${cleanTerm}%,description.ilike.%${cleanTerm}%,location.ilike.%${cleanTerm}%`
+      );
+    }
+  }
+
+  // Deterministic cursor pagination:
+  // (created_at < cursor.createdAt) OR (created_at = cursor.createdAt AND id < cursor.id)
+  if (cursor) {
+    query = query.or(
+      `created_at.lt.${cursor.createdAt},and(created_at.eq.${cursor.createdAt},id.lt.${cursor.id})`
+    );
+  }
+
+  query = query
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(limitCount);
+
+  return query;
+};
+
+const matchesActiveFilters = (post: Post, options: FetchPostsOptions): boolean => {
+  if (options.filter === "Lost" && post.type !== "lost") return false;
+  if (options.filter === "Found" && post.type !== "found") return false;
+  if (options.filter === "Resolved" && post.status !== "resolved" && post.status !== "returned") return false;
+
+  if (options.categories && options.categories.length > 0) {
+    const categoryKey = (value: string) => getCategoryConfig(value)?.key || normalizeCategoryKey(value);
+    const selectedKeys = new Set(options.categories.map(categoryKey));
+    if (!selectedKeys.has(categoryKey(post.category))) return false;
+  }
+
+  if (options.subcategories && options.subcategories.length > 0) {
+    if (!post.subCategory) return false;
+    const selectedSubKeys = new Set(options.subcategories.map(normalizeCategoryKey));
+    if (!selectedSubKeys.has(normalizeCategoryKey(post.subCategory))) return false;
+  }
+
+  if (options.search && options.search.trim()) {
+    const q = options.search.trim().toLowerCase();
+    const match = [
+      post.title,
+      post.description,
+      post.location,
+      post.category,
+      post.subCategory
+    ].some((text) => (text || "").toLowerCase().includes(q));
+    if (!match) return false;
+  }
+
+  return true;
+};
+
+const handleRealtimeInsert = (row: any) => {
+  const newPost = mapPostRow(row);
+  if (!matchesActiveFilters(newPost, activeFilterState)) return;
+  if (posts.value.some((p) => p.id === newPost.id)) return;
+  posts.value = [newPost, ...posts.value];
+};
+
+const handleRealtimeUpdate = (row: any) => {
+  const updatedPost = mapPostRow(row);
+  const idx = posts.value.findIndex((p) => p.id === updatedPost.id);
+  if (idx !== -1) {
+    if (matchesActiveFilters(updatedPost, activeFilterState)) {
+      posts.value[idx] = { ...posts.value[idx], ...updatedPost };
+    } else {
+      posts.value.splice(idx, 1);
+    }
+  }
+};
+
+const handleRealtimeDelete = (oldRow: any) => {
+  const deletedId = oldRow?.id;
+  if (deletedId) {
+    posts.value = posts.value.filter((p) => p.id !== deletedId);
+  }
 };
 
 const resolvePendingSubcategory = async (
@@ -76,51 +196,66 @@ export function usePosts() {
   const { currentProfile, currentUser } = useAuth();
   const { uploadPostImage, deleteUploadedFile } = useImageUpload();
 
-  const fetchPosts = async (options: { limit?: number; isRefresh?: boolean } = {}): Promise<Post[]> => {
-    const limitCount = options.limit || 50;
+  const fetchPosts = async (options: FetchPostsOptions = {}): Promise<Post[]> => {
+    const limitCount = options.limit || POSTS_PAGE_SIZE;
     const isRefresh = Boolean(options.isRefresh);
-
-    if (inFlightPostsPromise) {
-      return inFlightPostsPromise;
-    }
+    const token = ++currentQueryToken;
+    activeFilterState = { ...options };
 
     if (posts.value.length === 0 && !isRefresh) {
       postsLoading.value = true;
     } else {
       postsRefreshing.value = true;
     }
+    postsError.value = "";
+    postsLoadMoreError.value = "";
 
     const startTime = performance.now();
 
     inFlightPostsPromise = (async () => {
       try {
-        const { data, error } = await supabase
-          .from("posts")
-          .select("*")
-          .order("created_at", { ascending: false })
-          .limit(limitCount);
+        const query = buildPostsQuery(options, null, limitCount);
+        const { data, error } = await query;
+
+        if (token !== currentQueryToken) {
+          return posts.value;
+        }
 
         if (error) throw error;
 
         const loaded: Post[] = (data || []).map(mapPostRow);
         posts.value = loaded;
-        postsError.value = "";
+
+        if (loaded.length > 0) {
+          const last = loaded[loaded.length - 1];
+          currentCursor.value = {
+            createdAt: last.createdAtIso || new Date(last.createdAt).toISOString(),
+            id: last.id
+          };
+        } else {
+          currentCursor.value = null;
+        }
+
+        postsHasMore.value = loaded.length === limitCount;
 
         if (import.meta.env.DEV) {
           const elapsed = (performance.now() - startTime).toFixed(1);
-          console.log(`[Perf] Home posts: ${elapsed} ms (${loaded.length} posts)`);
+          console.log(`[Perf] Posts batch: ${elapsed} ms (${loaded.length} posts, hasMore: ${postsHasMore.value})`);
         }
 
         return loaded;
       } catch (error) {
+        if (token !== currentQueryToken) return posts.value;
         if (import.meta.env.DEV) {
           console.error("Posts fetch error:", error);
         }
         postsError.value = "Failed to load community posts.";
         return posts.value;
       } finally {
-        postsLoading.value = false;
-        postsRefreshing.value = false;
+        if (token === currentQueryToken) {
+          postsLoading.value = false;
+          postsRefreshing.value = false;
+        }
         inFlightPostsPromise = null;
       }
     })();
@@ -132,7 +267,57 @@ export function usePosts() {
     return inFlightPostsPromise;
   };
 
-  const subscribeToPosts = (options?: { limit?: number }) => {
+  const loadMorePosts = async (): Promise<Post[]> => {
+    if (postsLoading.value || postsLoadingMore.value || !postsHasMore.value || !currentCursor.value) {
+      return posts.value;
+    }
+
+    const token = currentQueryToken;
+    postsLoadingMore.value = true;
+    postsLoadMoreError.value = "";
+
+    try {
+      const query = buildPostsQuery(activeFilterState, currentCursor.value, POSTS_PAGE_SIZE);
+      const { data, error } = await query;
+
+      if (token !== currentQueryToken) {
+        return posts.value;
+      }
+
+      if (error) throw error;
+
+      const loaded: Post[] = (data || []).map(mapPostRow);
+
+      if (loaded.length > 0) {
+        const existingIds = new Set(posts.value.map((p) => p.id));
+        const newUnique = loaded.filter((p) => !existingIds.has(p.id));
+        posts.value = [...posts.value, ...newUnique];
+
+        const last = loaded[loaded.length - 1];
+        currentCursor.value = {
+          createdAt: last.createdAtIso || new Date(last.createdAt).toISOString(),
+          id: last.id
+        };
+      }
+
+      postsHasMore.value = loaded.length === POSTS_PAGE_SIZE;
+
+      return posts.value;
+    } catch (error) {
+      if (token !== currentQueryToken) return posts.value;
+      if (import.meta.env.DEV) {
+        console.error("Posts load-more error:", error);
+      }
+      postsLoadMoreError.value = "Failed to load more posts.";
+      return posts.value;
+    } finally {
+      if (token === currentQueryToken) {
+        postsLoadingMore.value = false;
+      }
+    }
+  };
+
+  const subscribeToPosts = (options: FetchPostsOptions = {}) => {
     fetchPosts(options);
 
     if (!realtimeChannelSubscribed) {
@@ -140,8 +325,14 @@ export function usePosts() {
       try {
         supabase
           .channel("public:posts")
-          .on("postgres_changes", { event: "*", schema: "public", table: "posts" }, () => {
-            fetchPosts({ isRefresh: true });
+          .on("postgres_changes", { event: "INSERT", schema: "public", table: "posts" }, (payload) => {
+            handleRealtimeInsert(payload.new);
+          })
+          .on("postgres_changes", { event: "UPDATE", schema: "public", table: "posts" }, (payload) => {
+            handleRealtimeUpdate(payload.new);
+          })
+          .on("postgres_changes", { event: "DELETE", schema: "public", table: "posts" }, (payload) => {
+            handleRealtimeDelete(payload.old);
           })
           .subscribe();
       } catch (err) {
@@ -156,13 +347,17 @@ export function usePosts() {
       if (raw) {
         myHelpfulMap.value = JSON.parse(raw);
       }
-    } catch {}
+    } catch {
+      /* ignore storage read error */
+    }
   };
 
   const saveMyHelpful = (uid: string) => {
     try {
       localStorage.setItem(`user_helpful_${uid}`, JSON.stringify(myHelpfulMap.value));
-    } catch {}
+    } catch {
+      /* ignore storage write error */
+    }
   };
 
   const createPost = async (data: PostFormData): Promise<string> => {
@@ -281,7 +476,9 @@ export function usePosts() {
             normalized_key: pending.normalizedKey,
             name: pending.name
           });
-        } catch {}
+        } catch {
+          /* ignore subcategory upsert error */
+        }
       }
     }
 
@@ -333,7 +530,9 @@ export function usePosts() {
 
     try {
       await supabase.from("comments").delete().eq("post_id", postId);
-    } catch {}
+    } catch {
+      /* ignore comments cleanup error */
+    }
 
     posts.value = posts.value.filter((p) => p.id !== postId);
   };
@@ -426,8 +625,14 @@ export function usePosts() {
     posts,
     postsLoading,
     postsRefreshing,
+    postsLoadingMore,
+    postsHasMore,
     postsError,
+    postsLoadMoreError,
+    currentCursor,
+    POSTS_PAGE_SIZE,
     fetchPosts,
+    loadMorePosts,
     subscribeToPosts,
     createPost,
     updatePost,

@@ -1,9 +1,15 @@
 <template>
-  <ion-page>
-    <!-- Fixed Page Header -->
-    <PageHeader title="My Profile" />
+  <component
+    :is="isDesktop ? 'div' : IonPage"
+    class="profile-page-root"
+  >
+    <!-- Fixed Page Header (Mobile only) -->
+    <PageHeader v-if="!isDesktop" title="My Profile" />
 
-    <ion-content :fullscreen="false" :force-overscroll="false" class="profile-content">
+    <component
+      :is="isDesktop ? 'div' : IonContent"
+      v-bind="isDesktop ? { class: 'profile-content' } : { fullscreen: false, forceOverscroll: false, class: 'profile-content' }"
+    >
       <div class="ios-screen-container profile-container">
         <!-- Modern Profile Hero Card -->
         <div class="profile-hero-card">
@@ -142,7 +148,7 @@
 
         <div class="dock-spacer"></div>
       </div>
-    </ion-content>
+    </component>
 
     <PostComposerModal
       :is-open="showComposer"
@@ -150,17 +156,16 @@
       @close="showComposer = false"
       @submit="handleCreate"
     />
-  </ion-page>
+  </component>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import {
   IonContent,
   IonPage,
-  onIonViewWillEnter,
-  toastController
+  onIonViewWillEnter
 } from "@ionic/vue";
 import PageHeader from "../components/PageHeader.vue";
 import {
@@ -179,7 +184,38 @@ import AchievementBadge from "../components/AchievementBadge.vue";
 import { useAuth, currentAppUserId } from "../composables/useAuth";
 import { usePosts } from "../composables/usePosts";
 import { useAchievements } from "../composables/useAchievements";
-import type { PostFormData } from "../types/post";
+
+const isDesktop = ref(
+  typeof window !== "undefined" ? window.matchMedia("(min-width: 1200px)").matches : false
+);
+
+let mediaQueryList: MediaQueryList | null = null;
+const handleMediaChange = (e: MediaQueryListEvent | MediaQueryList) => {
+  isDesktop.value = e.matches;
+};
+
+onMounted(() => {
+  if (typeof window !== "undefined") {
+    mediaQueryList = window.matchMedia("(min-width: 1200px)");
+    isDesktop.value = mediaQueryList.matches;
+    if (mediaQueryList.addEventListener) {
+      mediaQueryList.addEventListener("change", handleMediaChange);
+    } else {
+      mediaQueryList.addListener(handleMediaChange);
+    }
+  }
+});
+
+onUnmounted(() => {
+  if (mediaQueryList) {
+    if (mediaQueryList.removeEventListener) {
+      mediaQueryList.removeEventListener("change", handleMediaChange);
+    } else {
+      mediaQueryList.removeListener(handleMediaChange);
+    }
+    mediaQueryList = null;
+  }
+});
 
 const router = useRouter();
 const { currentProfile } = useAuth();
@@ -612,5 +648,23 @@ const handleCreate = () => {
 
 .dock-spacer {
   height: 20px;
+}
+
+@media (min-width: 1200px) {
+  .profile-page-root {
+    width: 100%;
+    max-width: var(--desktop-feed-width, 680px);
+    margin: 0 auto;
+    display: block;
+  }
+
+  .profile-container {
+    padding: 24px 0 80px 0;
+    max-width: 100%;
+  }
+
+  .dock-spacer {
+    display: none !important;
+  }
 }
 </style>

@@ -4,132 +4,57 @@
     :is-open="isOpen"
     :breakpoints="modalBreakpoints"
     :initial-breakpoint="modalInitialBreakpoint"
-    @did-dismiss="handleClose"
+    @did-dismiss="handleDismiss"
   >
     <div class="composer-sheet">
-      <!-- Lightweight Header Bar -->
+      <!-- Lightweight Header Bar (Panel-Aware) -->
       <header class="composer-header">
-        <button type="button" class="header-cancel-btn" @click="handleClose">
-          Cancel
-        </button>
-        <span class="composer-header-title">Create Post</span>
-        <button
-          type="button"
-          class="header-post-btn"
-          :class="{ 'retry-btn': submissionState === 'failed' }"
-          :disabled="!isValid || submissionState === 'sending'"
-          @click="handleSubmit"
-        >
-          <ion-spinner v-if="submissionState === 'sending'" name="crescent" class="post-spinner" />
-          <span v-else-if="submissionState === 'failed'">Retry</span>
-          <span v-else>Post</span>
-        </button>
+        <!-- COMPOSE PANEL HEADER -->
+        <template v-if="currentPanel === 'compose'">
+          <button type="button" class="header-cancel-btn" @click="handleCancel">
+            Cancel
+          </button>
+          <span class="composer-header-title">Create Post</span>
+          <button
+            type="button"
+            class="header-post-btn"
+            :class="{ 'retry-btn': submissionState === 'failed' }"
+            :disabled="!isValid || submissionState === 'sending'"
+            @click="handleSubmit"
+          >
+            <ion-spinner v-if="submissionState === 'sending'" name="crescent" class="post-spinner" />
+            <span v-else-if="submissionState === 'failed'">Retry</span>
+            <span v-else>Post</span>
+          </button>
+        </template>
+
+        <!-- CATEGORY PANEL HEADER -->
+        <template v-else-if="currentPanel === 'category'">
+          <button type="button" class="header-back-btn" @click="currentPanel = 'compose'">
+            <ChevronLeft :size="18" />
+            <span>Back</span>
+          </button>
+          <span class="composer-header-title">Select Category</span>
+          <button type="button" class="header-done-btn" @click="currentPanel = 'compose'">
+            Done
+          </button>
+        </template>
+
+        <!-- DATE PANEL HEADER -->
+        <template v-else-if="currentPanel === 'date'">
+          <button type="button" class="header-back-btn" @click="handleDateBack">
+            <ChevronLeft :size="18" />
+            <span>Back</span>
+          </button>
+          <span class="composer-header-title">{{ datePanelView === 'calendar' ? 'Custom Date' : 'Select Date' }}</span>
+          <button type="button" class="header-done-btn" @click="handleDateApply">
+            Apply
+          </button>
+        </template>
       </header>
 
-      <!-- Social Composer Body -->
+      <!-- Panel-Aware Composer Body Container -->
       <div class="composer-body">
-        <!-- Author Profile Row -->
-        <div class="composer-author-row">
-          <UserAvatar
-            :name="currentProfile?.name || 'User'"
-            :username="currentProfile?.username || 'user'"
-            :avatar-url="currentProfile?.avatarUrl"
-            size="md"
-          />
-          <div class="author-meta">
-            <span class="author-name">{{ currentProfile?.name || 'Anonymous' }}</span>
-            <span class="author-handle">@{{ currentProfile?.username || 'community' }}</span>
-          </div>
-        </div>
-
-        <!-- Minimal Lost / Found Chips Selector -->
-        <div class="type-chips-row">
-          <button
-            type="button"
-            class="type-chip lost-chip"
-            :class="{ active: form.type === 'lost' }"
-            @click="form.type = 'lost'"
-          >
-            <span class="chip-dot"></span>
-            <span>Lost</span>
-          </button>
-          <button
-            type="button"
-            class="type-chip found-chip"
-            :class="{ active: form.type === 'found' }"
-            @click="form.type = 'found'"
-          >
-            <span class="chip-dot"></span>
-            <span>Found</span>
-          </button>
-        </div>
-
-        <!-- Main Title Input -->
-        <div class="title-area">
-          <input
-            v-model="form.title"
-            type="text"
-            class="composer-title-input"
-            :placeholder="form.type === 'found' ? 'What did you find?' : 'What did you lose?'"
-            maxlength="80"
-          />
-          <span v-if="errors.title" class="field-error-text">{{ errors.title }}</span>
-        </div>
-
-        <!-- Main Description Textarea -->
-        <div class="desc-area">
-          <textarea
-            v-model="form.description"
-            rows="4"
-            class="composer-desc-input"
-            :placeholder="form.type === 'found' ? 'Describe the item, distinctive marks, or where it is safely kept...' : 'Tell the community what happened, contents, identifying markings...'"
-            maxlength="800"
-          ></textarea>
-          <span v-if="errors.description" class="field-error-text">{{ errors.description }}</span>
-        </div>
-
-        <!-- Photo Attachment Preview or Add Photo Button -->
-        <div v-if="previewPhotoUrl" class="photo-preview-wrap">
-          <img :src="previewPhotoUrl" alt="Attached photo" class="preview-img" />
-          <div class="photo-overlay-actions">
-            <button
-              type="button"
-              class="overlay-action-btn change-btn"
-              :disabled="submitting"
-              @click="triggerPhotoPicker"
-            >
-              <Camera :size="14" />
-              <span>Change</span>
-            </button>
-            <button
-              type="button"
-              class="overlay-action-btn remove-btn"
-              :disabled="submitting"
-              @click="removePhoto"
-            >
-              <Trash2 :size="14" />
-              <span>Remove</span>
-            </button>
-          </div>
-        </div>
-
-        <div v-else class="photo-add-section">
-          <button
-            type="button"
-            class="add-photo-btn"
-            :disabled="submitting"
-            @click="triggerPhotoPicker"
-          >
-            <ImagePlus :size="18" />
-            <span>Add Photo</span>
-          </button>
-        </div>
-
-        <span v-if="photoError" class="field-error-text">{{ photoError }}</span>
-
-        <!-- Temporary Android Upload Diagnostics (Shown only on failure) -->
-        <UploadDebugBanner />
-
         <input
           ref="fileInputRef"
           type="file"
@@ -138,47 +63,42 @@
           @change="onPhotoSelected"
         />
 
-        <!-- Attachment Rows (Compact list, no cards) -->
-        <div class="attachment-rows-list">
-          <PostCategoryFields
-            :key="formSession"
+        <!-- Transition Panel Content -->
+        <transition name="panel-fade" mode="out-in">
+          <ComposerMainPanel
+            v-if="currentPanel === 'compose'"
+            :form="form"
+            :current-profile="currentProfile"
+            :preview-photo-url="previewPhotoUrl"
+            :photo-error="photoError"
+            :errors="errors"
+            :submitting="submitting"
+            @open-panel="openPanel"
+            @trigger-photo="triggerPhotoPicker"
+            @remove-photo="removePhoto"
+            @update:type="(val) => form.type = val"
+            @update:title="(val) => form.title = val"
+            @update:description="(val) => form.description = val"
+            @update:location="(val) => form.location = val"
+          />
+
+          <ComposerCategoryPanel
+            v-else-if="currentPanel === 'category'"
             v-model:category="form.category"
             v-model:sub-category="form.subCategory"
             v-model:pending-subcategory="form.pendingSubcategory"
             :disabled="submitting"
             :error="errors.category"
+            @select-and-close="currentPanel = 'compose'"
           />
 
-          <!-- Location Row -->
-          <div class="attachment-row">
-            <div class="row-left">
-              <MapPin :size="16" class="row-icon" />
-              <span class="row-label">{{ form.type === 'found' ? 'Found At' : 'Location' }}</span>
-            </div>
-            <div class="row-right input-right">
-              <input
-                v-model="form.location"
-                type="text"
-                class="row-input"
-                placeholder="e.g. Central Mall, 2nd Floor"
-                maxlength="100"
-              />
-            </div>
-          </div>
-
-          <!-- Date Row (Custom Calendar Picker) -->
-          <CustomDatePicker
+          <ComposerDatePanel
+            v-else-if="currentPanel === 'date'"
             v-model="form.eventDate"
-            :disabled="submitting"
-            :error="errors.eventDate"
+            v-model:view="datePanelView"
+            @apply="handleDateApply"
           />
-        </div>
-
-        <!-- Visibility Footer -->
-        <div class="post-visibility-footer">
-          <Globe :size="15" class="globe-icon" />
-          <span>Post visibility: Public · Visible to community</span>
-        </div>
+        </transition>
       </div>
     </div>
   </ion-modal>
@@ -187,17 +107,10 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { IonModal, IonSpinner, toastController } from "@ionic/vue";
-import {
-  MapPin,
-  ImagePlus,
-  Camera,
-  Trash2,
-  Globe
-} from "lucide-vue-next";
-import UserAvatar from "./UserAvatar.vue";
-import PostCategoryFields from "./PostCategoryFields.vue";
-import CustomDatePicker from "./CustomDatePicker.vue";
-import UploadDebugBanner from "./UploadDebugBanner.vue";
+import { ChevronLeft } from "lucide-vue-next";
+import ComposerMainPanel from "./post-composer/ComposerMainPanel.vue";
+import ComposerCategoryPanel from "./post-composer/ComposerCategoryPanel.vue";
+import ComposerDatePanel, { type DatePanelView } from "./post-composer/ComposerDatePanel.vue";
 import { useAuth } from "../composables/useAuth";
 import { usePosts } from "../composables/usePosts";
 import { generateClientRequestId } from "../utils/idempotency";
@@ -207,6 +120,8 @@ import {
   type PostFormErrors,
   type PostType
 } from "../types/post";
+
+type ComposerPanel = "compose" | "category" | "date";
 
 const props = withDefaults(
   defineProps<{
@@ -226,6 +141,29 @@ const emit = defineEmits<{
 
 const { currentProfile } = useAuth();
 const { createPost } = usePosts();
+
+const currentPanel = ref<ComposerPanel>("compose");
+const datePanelView = ref<DatePanelView>("presets");
+
+const openPanel = (panel: ComposerPanel) => {
+  if (panel === "date") {
+    datePanelView.value = "presets";
+  }
+  currentPanel.value = panel;
+};
+
+const handleDateBack = () => {
+  if (datePanelView.value === "calendar") {
+    datePanelView.value = "presets";
+  } else {
+    currentPanel.value = "compose";
+  }
+};
+
+const handleDateApply = () => {
+  datePanelView.value = "presets";
+  currentPanel.value = "compose";
+};
 
 // Responsive modal behavior: desktop (>= 1200px) uses full [0, 1] breakpoint opening at 1 (100% height)
 const isDesktop = ref(typeof window !== "undefined" ? window.innerWidth >= 1200 : false);
@@ -250,6 +188,8 @@ watch(
   (open) => {
     if (open) {
       updateIsDesktop();
+      currentPanel.value = "compose";
+      datePanelView.value = "presets";
     }
   }
 );
@@ -265,7 +205,6 @@ const modalInitialBreakpoint = computed(() => {
 const submissionState = ref<"idle" | "sending" | "failed" | "sent">("idle");
 const activeClientRequestId = ref<string>(generateClientRequestId());
 const submitting = computed(() => submissionState.value === "sending");
-const formSession = ref(0);
 const fileInputRef = ref<HTMLInputElement | null>(null);
 const previewPhotoUrl = ref("");
 const photoError = ref("");
@@ -313,6 +252,7 @@ watch(
       }
       submissionState.value = "idle";
       activeClientRequestId.value = generateClientRequestId();
+      currentPanel.value = "compose";
       form.type = props.initialType;
       form.title = "";
       form.category = "";
@@ -327,12 +267,22 @@ watch(
       form.imageFile = null;
       previewPhotoUrl.value = "";
       photoError.value = "";
-      formSession.value += 1;
       if (fileInputRef.value) fileInputRef.value.value = "";
       Object.keys(errors).forEach((k) => delete errors[k as keyof PostFormData]);
     }
   }
 );
+
+const handleCancel = () => {
+  datePanelView.value = "presets";
+  emit("close");
+};
+
+const handleDismiss = () => {
+  currentPanel.value = "compose";
+  datePanelView.value = "presets";
+  emit("close");
+};
 
 const triggerPhotoPicker = () => {
   fileInputRef.value?.click();
@@ -431,7 +381,7 @@ const handleSubmit = async () => {
     }
 
     const toast = await toastController.create({
-      message: `${form.type === 'found' ? 'Found' : 'Lost'} report posted successfully!`,
+      message: `${form.type === "found" ? "Found" : "Lost"} report posted successfully!`,
       duration: 2500,
       position: "top",
       color: "success"
@@ -453,39 +403,58 @@ const handleSubmit = async () => {
     await toast.present();
   }
 };
-
-const handleClose = () => {
-  if (submissionState.value === "sending") return;
-  emit("close");
-};
 </script>
 
 <style scoped>
+/* Hidden inputs */
+.hidden-file-input {
+  display: none;
+}
+
+/* Modal Styling */
+.post-composer-modal {
+  --background: var(--app-surface);
+  --border-radius: 20px 20px 0 0;
+  --max-height: 92vh;
+}
+
+@media (min-width: 1200px) {
+  .post-composer-modal {
+    --width: 580px;
+    --height: 82vh;
+    --max-height: 820px;
+    --border-radius: 20px;
+    --box-shadow: 0 20px 48px rgba(0, 0, 0, 0.28);
+  }
+
+  .post-composer-modal::part(content) {
+    border-radius: 20px;
+    overflow: hidden;
+    background: var(--app-surface);
+    border: 1px solid var(--app-border, rgba(20, 25, 30, 0.08));
+    position: relative;
+    margin: auto;
+  }
+}
+
 .composer-sheet {
   display: flex;
   flex-direction: column;
   height: 100%;
   background: var(--app-surface);
   color: var(--app-text-primary);
-  border-top-left-radius: 24px;
-  border-top-right-radius: 24px;
-  overflow: hidden;
+  box-sizing: border-box;
 }
 
-/* Lightweight Social Header */
+/* Header Bar */
 .composer-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 14px 18px;
-  border-bottom: 1px solid var(--app-card-border);
-  background: var(--app-surface);
-}
-
-.composer-header-title {
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--app-text-primary);
+  border-bottom: 1px solid var(--app-border, rgba(20, 25, 30, 0.08));
+  flex-shrink: 0;
+  min-height: 54px;
 }
 
 .header-cancel-btn {
@@ -493,12 +462,60 @@ const handleClose = () => {
   border: none;
   font-size: 15px;
   color: var(--app-text-secondary);
+  font-weight: 500;
   cursor: pointer;
-  padding: 6px 4px;
+  padding: 4px 8px;
+}
+
+.header-cancel-btn:hover {
+  color: var(--app-text-primary);
+}
+
+.header-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: none;
+  font-size: 15px;
+  font-weight: 550;
+  color: var(--app-primary, #2640DB);
+  cursor: pointer;
+  padding: 4px 8px 4px 0;
+}
+
+.header-back-btn:hover {
+  opacity: 0.85;
+}
+
+.composer-header-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--app-text-primary);
+  letter-spacing: -0.01em;
+}
+
+.header-done-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--app-primary, #2640DB);
+  color: #ffffff;
+  border: none;
+  border-radius: 9999px;
+  padding: 6px 16px;
+  font-size: 13.5px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.header-done-btn:hover {
+  opacity: 0.9;
 }
 
 .header-post-btn {
-  background: var(--app-primary);
+  background: var(--app-primary, #2640DB);
   color: #ffffff;
   border: none;
   font-size: 14px;
@@ -519,7 +536,7 @@ const handleClose = () => {
 }
 
 .header-post-btn:active:not(:disabled) {
-  background: var(--app-primary-deep);
+  background: var(--app-primary-deep, #0019B7);
   transform: scale(0.96);
 }
 
@@ -536,327 +553,22 @@ const handleClose = () => {
   padding: 16px 18px 40px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
   background: var(--app-surface);
 }
 
-/* Author Identity Row */
-.composer-author-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+/* Panel Fade Transitions */
+.panel-fade-enter-active,
+.panel-fade-leave-active {
+  transition: opacity 0.15s ease, transform 0.15s ease;
 }
 
-.author-meta {
-  display: flex;
-  flex-direction: column;
+.panel-fade-enter-from {
+  opacity: 0;
+  transform: translateX(8px);
 }
 
-.author-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--app-text-primary);
-}
-
-.author-handle {
-  font-size: 12px;
-  color: var(--app-text-secondary);
-}
-
-/* Minimal Lost / Found Selector Chips */
-.type-chips-row {
-  display: flex;
-  gap: 8px;
-}
-
-.type-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 14px;
-  border-radius: 16px;
-  border: 1px solid var(--app-card-border);
-  background: transparent;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--app-text-secondary);
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.chip-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--app-text-tertiary);
-}
-
-.lost-chip.active {
-  background: rgba(255, 59, 48, 0.08);
-  border-color: rgba(255, 59, 48, 0.35);
-  color: #ff3b30;
-}
-
-.lost-chip.active .chip-dot {
-  background: #ff3b30;
-}
-
-.found-chip.active {
-  background: rgba(52, 199, 89, 0.08);
-  border-color: rgba(52, 199, 89, 0.35);
-  color: #34c759;
-}
-
-.found-chip.active .chip-dot {
-  background: #34c759;
-}
-
-/* Title & Description Areas */
-.title-area,
-.desc-area {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.composer-title-input {
-  width: 100%;
-  background: transparent;
-  border: none;
-  font-size: 19px;
-  font-weight: 700;
-  color: var(--app-text-primary);
-  outline: none;
-  padding: 4px 0;
-  letter-spacing: -0.3px;
-}
-
-.composer-title-input::placeholder {
-  color: var(--app-text-tertiary);
-}
-
-.composer-desc-input {
-  width: 100%;
-  background: transparent;
-  border: none;
-  font-size: 15px;
-  line-height: 1.45;
-  color: var(--app-text-primary);
-  outline: none;
-  resize: none;
-  padding: 4px 0;
-  font-family: inherit;
-}
-
-.composer-desc-input::placeholder {
-  color: var(--app-text-secondary);
-}
-
-.field-error-text {
-  font-size: 12px;
-  color: var(--app-lost);
-}
-
-/* Photo Attachment */
-.photo-preview-wrap {
-  position: relative;
-  width: 100%;
-  max-height: 240px;
-  border-radius: 14px;
-  overflow: hidden;
-  border: 1px solid var(--app-card-border);
-}
-
-.preview-img {
-  width: 100%;
-  height: 100%;
-  max-height: 240px;
-  object-fit: cover;
-  display: block;
-}
-
-.photo-overlay-actions {
-  position: absolute;
-  bottom: 10px;
-  right: 10px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.overlay-action-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border-radius: 20px;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  border: none;
-  background: rgba(0, 0, 0, 0.7);
-  color: #ffffff;
-  backdrop-filter: blur(8px);
-  transition: background-color 0.15s ease;
-}
-
-.overlay-action-btn:active {
-  background: rgba(0, 0, 0, 0.85);
-}
-
-.overlay-action-btn.remove-btn:hover,
-.overlay-action-btn.remove-btn:active {
-  background: rgba(239, 68, 68, 0.85);
-}
-
-.photo-add-section {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.add-photo-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  align-self: flex-start;
-  padding: 8px 14px;
-  background: var(--app-surface-secondary);
-  border: 1px dashed var(--app-card-border);
-  border-radius: 12px;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--app-text-secondary);
-  cursor: pointer;
-  transition: background-color 0.15s ease;
-}
-
-.add-photo-btn:active {
-  background: var(--app-surface-tertiary, rgba(20, 25, 30, 0.08));
-}
-
-.photo-disabled-hint {
-  font-size: 11px;
-  color: var(--app-text-tertiary);
-  margin-top: 2px;
-}
-
-.hidden-file-input {
-  display: none;
-}
-
-/* Attachment Rows (Compact list, separated by thin borders) */
-.attachment-rows-list {
-  display: flex;
-  flex-direction: column;
-  border-top: 1px solid var(--app-card-border);
-  border-bottom: 1px solid var(--app-card-border);
-  margin-top: 6px;
-}
-
-.attachment-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 2px;
-  border-bottom: 1px solid var(--app-card-border);
-  position: relative;
-  cursor: pointer;
-}
-
-.attachment-row:last-child {
-  border-bottom: none;
-}
-
-.row-left {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--app-text-secondary);
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.row-icon {
-  color: var(--app-text-tertiary);
-}
-
-.row-right {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  position: relative;
-}
-
-.row-right.input-right {
-  flex: 1;
-  justify-content: flex-end;
-  margin-left: 12px;
-}
-
-.row-chevron {
-  color: var(--app-text-tertiary);
-}
-
-.row-input {
-  background: transparent;
-  border: none;
-  text-align: right;
-  font-size: 13px;
-  color: var(--app-text-primary);
-  outline: none;
-  width: 100%;
-}
-
-.row-input::placeholder {
-  color: var(--app-text-tertiary);
-}
-
-.row-date-input {
-  background: transparent;
-  border: none;
-  font-size: 13px;
-  color: var(--app-text-primary);
-  outline: none;
-  font-family: inherit;
-  text-align: right;
-}
-
-/* Visibility Footer */
-.post-visibility-footer {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--app-text-tertiary);
-  font-size: 12px;
-  padding: 4px 2px;
-}
-
-.globe-icon {
-  flex-shrink: 0;
-}
-
-/* Desktop Refined Presentation (>= 1200px) */
-@media (min-width: 1200px) {
-  .composer-sheet {
-    border-radius: 24px;
-  }
-
-  .composer-header {
-    padding: 16px 24px;
-  }
-
-  .composer-header-title {
-    font-size: 17px;
-  }
-
-  .composer-body {
-    padding: 20px 24px 36px;
-    gap: 18px;
-  }
-
-  .composer-title-input {
-    font-size: 20px;
-  }
+.panel-fade-leave-to {
+  opacity: 0;
+  transform: translateX(-8px);
 }
 </style>

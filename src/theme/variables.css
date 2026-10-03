@@ -236,44 +236,10 @@ ion-content::part(scroll) {
   }
 }
 
-/* Desktop Responsive Container & Single-Scroll Architecture (>= 1200px) */
+/* Desktop Container Settings (>= 1200px) */
 @media (min-width: 1200px) {
   :root {
     --max-content-width: 680px;
-  }
-
-  /* Make routed views inside desktop outlet static in document flow */
-  .outlet-viewport ion-router-outlet,
-  .outlet-viewport ion-page {
-    position: static !important;
-    height: auto !important;
-    min-height: 100% !important;
-    overflow: visible !important;
-    contain: none !important;
-  }
-
-  /* Deactivate internal scrolling on center feed so desktop shell is the single scroll owner */
-  .outlet-viewport ion-content {
-    --overflow: visible !important;
-    overflow: visible !important;
-    height: auto !important;
-    contain: none !important;
-    position: static !important;
-  }
-
-  .outlet-viewport ion-content::part(scroll) {
-    position: static !important;
-    height: auto !important;
-    overflow: visible !important;
-    contain: none !important;
-  }
-
-  .outlet-viewport ion-content #background-content {
-    display: none !important;
-  }
-
-  .outlet-viewport ion-refresher {
-    display: none !important;
   }
 }
 

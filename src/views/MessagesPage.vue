@@ -1,7 +1,10 @@
 <template>
-  <ion-page>
-    <!-- Fixed Page Header -->
-    <PageHeader title="Messages">
+  <component
+    :is="isDesktop ? 'div' : IonPage"
+    class="messages-page-root"
+  >
+    <!-- Fixed Page Header (Mobile only) -->
+    <PageHeader v-if="!isDesktop" title="Messages">
       <template #action>
         <button
           type="button"
@@ -16,8 +19,11 @@
       </template>
     </PageHeader>
 
-    <ion-content :fullscreen="false" :force-overscroll="false" class="messages-content">
-      <ion-refresher slot="fixed" @ion-refresh="handleRefresh">
+    <component
+      :is="isDesktop ? 'div' : IonContent"
+      v-bind="isDesktop ? { class: 'messages-content' } : { fullscreen: false, forceOverscroll: false, class: 'messages-content' }"
+    >
+      <ion-refresher v-if="!isDesktop" slot="fixed" @ion-refresh="handleRefresh">
         <ion-refresher-content pulling-icon="arrow-down" refreshing-spinner="crescent" />
       </ion-refresher>
 
@@ -88,12 +94,12 @@
           />
         </div>
       </div>
-    </ion-content>
-  </ion-page>
+    </component>
+  </component>
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, watch } from 'vue';
+import { onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import {
   IonPage,
@@ -108,6 +114,15 @@ import PageHeader from '../components/PageHeader.vue';
 import ConversationRow from '../components/ConversationRow.vue';
 import { useConversations } from '../composables/useConversations';
 import { useAuth } from '../composables/useAuth';
+
+const isDesktop = ref(
+  typeof window !== 'undefined' ? window.matchMedia('(min-width: 1200px)').matches : false
+);
+
+let mediaQueryList: MediaQueryList | null = null;
+const handleMediaChange = (e: MediaQueryListEvent | MediaQueryList) => {
+  isDesktop.value = e.matches;
+};
 
 const router = useRouter();
 const { hasValidSession } = useAuth();
@@ -126,6 +141,15 @@ onIonViewWillEnter(() => {
 });
 
 onMounted(() => {
+  if (typeof window !== 'undefined') {
+    mediaQueryList = window.matchMedia('(min-width: 1200px)');
+    isDesktop.value = mediaQueryList.matches;
+    if (mediaQueryList.addEventListener) {
+      mediaQueryList.addEventListener('change', handleMediaChange);
+    } else {
+      mediaQueryList.addListener(handleMediaChange);
+    }
+  }
   if (hasValidSession.value) {
     subscribeToConversations();
   }
@@ -140,6 +164,14 @@ watch(hasValidSession, (valid) => {
 });
 
 onUnmounted(() => {
+  if (mediaQueryList) {
+    if (mediaQueryList.removeEventListener) {
+      mediaQueryList.removeEventListener('change', handleMediaChange);
+    } else {
+      mediaQueryList.removeListener(handleMediaChange);
+    }
+    mediaQueryList = null;
+  }
   stopConversationSubscription();
 });
 
@@ -363,6 +395,20 @@ const handleSelectConversation = (convId: string) => {
   }
   to {
     transform: rotate(360deg);
+  }
+}
+
+@media (min-width: 1200px) {
+  .messages-page-root {
+    width: 100%;
+    max-width: var(--desktop-feed-width, 680px);
+    margin: 0 auto;
+    display: block;
+  }
+
+  .messages-container {
+    padding: 24px 0 80px 0;
+    max-width: 100%;
   }
 }
 </style>

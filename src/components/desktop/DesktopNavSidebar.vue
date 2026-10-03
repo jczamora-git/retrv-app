@@ -1,7 +1,7 @@
 <template>
-  <aside class="desktop-sidebar-root" aria-label="Desktop Navigation and Filters">
+  <nav class="desktop-nav-sidebar-root" aria-label="Desktop Navigation and Filters">
     <!-- Primary Navigation Section -->
-    <nav class="sidebar-nav-section" aria-label="Primary Navigation">
+    <div class="sidebar-nav-section">
       <ul class="nav-items-list" role="list">
         <!-- Home -->
         <li role="listitem">
@@ -79,7 +79,7 @@
           </button>
         </li>
       </ul>
-    </nav>
+    </div>
 
     <!-- Visual Separator -->
     <div class="sidebar-divider" role="separator" aria-hidden="true"></div>
@@ -99,38 +99,47 @@
         </button>
       </div>
 
-      <ul class="categories-list" role="list">
-        <li
+      <div class="category-filter-list" role="group" aria-label="Category filter options">
+        <button
           v-for="cat in visibleCategories"
-          :key="cat.key"
-          role="listitem"
+          :key="cat.name"
+          type="button"
+          class="category-filter-row"
+          :class="{ active: isCategorySelected(cat.name) }"
+          :aria-pressed="isCategorySelected(cat.name)"
+          @click="handleCategoryClick(cat.name)"
         >
-          <button
-            type="button"
-            class="category-filter-item"
-            :class="{ selected: isCategorySelected(cat.name) }"
-            :aria-pressed="isCategorySelected(cat.name)"
-            @click="handleCategoryClick(cat.name)"
-          >
-            <span class="category-bullet" aria-hidden="true"></span>
-            <span class="category-name">{{ cat.name }}</span>
-          </button>
-        </li>
-      </ul>
+          <div class="cat-icon-wrap">
+            <component
+              :is="getCategoryIcon(cat.key)"
+              :size="17"
+              class="cat-row-icon"
+              aria-hidden="true"
+            />
+          </div>
+          <span class="cat-row-label">{{ cat.name }}</span>
+        </button>
 
-      <!-- Show more / Show less toggle -->
-      <button
-        v-if="MAIN_CATEGORIES.length > INITIAL_CATEGORY_COUNT"
-        type="button"
-        class="show-more-toggle-btn"
-        :aria-expanded="isExpanded"
-        @click="isExpanded = !isExpanded"
-      >
-        <span>{{ isExpanded ? "Show less" : `Show more (${MAIN_CATEGORIES.length - INITIAL_CATEGORY_COUNT})` }}</span>
-        <component :is="isExpanded ? ChevronUp : ChevronDown" :size="15" aria-hidden="true" />
-      </button>
+        <!-- Expand / Collapse Toggle Button -->
+        <button
+          type="button"
+          class="expand-categories-row"
+          :aria-expanded="isExpanded"
+          @click="isExpanded = !isExpanded"
+        >
+          <span class="expand-label">
+            {{ isExpanded ? "Show less" : `Show ${MAIN_CATEGORIES.length - INITIAL_CATEGORY_COUNT} more` }}
+          </span>
+          <component
+            :is="isExpanded ? ChevronUp : ChevronDown"
+            :size="14"
+            class="expand-toggle-icon"
+            aria-hidden="true"
+          />
+        </button>
+      </div>
     </section>
-  </aside>
+  </nav>
 </template>
 
 <script setup lang="ts">
@@ -145,9 +154,9 @@ import {
   ChevronUp
 } from "lucide-vue-next";
 import { MAIN_CATEGORIES } from "../../config/categories";
+import { getCategoryIcon } from "../../config/categoryIcons";
 import { useFeedFilter } from "../../composables/useFeedFilter";
 import { useMessageUnread } from "../../composables/useMessageUnread";
-import { toastController } from "@ionic/vue";
 
 const INITIAL_CATEGORY_COUNT = 7;
 
@@ -185,18 +194,13 @@ const handleNav = (tab: "home" | "messages" | "profile") => {
   emit("select-tab", tab);
 };
 
-const handleMapsClick = async () => {
-  const toast = await toastController.create({
-    message: "Explore Maps is coming soon in a future update.",
-    duration: 2500,
-    position: "bottom"
-  });
-  await toast.present();
+const handleMapsClick = () => {
+  // Graceful feedback for desktop
+  window.alert("Explore Maps is coming soon in a future update.");
 };
 
 const handleCategoryClick = (categoryName: string) => {
   toggleCategory(categoryName);
-  // Ensure we are on home tab to see the filtered feed
   if (!window.location.pathname.includes("/tabs/home")) {
     router.push("/tabs/home");
   }
@@ -209,7 +213,7 @@ const clearCategoryFilters = () => {
 </script>
 
 <style scoped>
-.desktop-sidebar-root {
+.desktop-nav-sidebar-root {
   width: 100%;
   flex-shrink: 0;
   display: flex;
@@ -258,12 +262,7 @@ const clearCategoryFilters = () => {
 .sidebar-nav-link.active {
   background-color: var(--app-primary-soft, rgba(38, 64, 219, 0.10));
   color: var(--app-primary, #2640DB);
-  font-weight: 600;
-}
-
-.sidebar-nav-link:focus-visible {
-  outline: 2px solid var(--app-primary);
-  outline-offset: 1px;
+  font-weight: 650;
 }
 
 .nav-icon-wrap {
@@ -272,7 +271,6 @@ const clearCategoryFilters = () => {
   justify-content: center;
   width: 24px;
   height: 24px;
-  color: inherit;
   flex-shrink: 0;
 }
 
@@ -283,12 +281,12 @@ const clearCategoryFilters = () => {
 .sidebar-unread-dot {
   position: absolute;
   top: -1px;
-  right: -2px;
+  right: -1px;
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background-color: #ef4444;
-  border: 1.5px solid var(--app-surface);
+  background-color: var(--app-primary, #2640DB);
+  border: 2px solid var(--app-bg, #ffffff);
 }
 
 .nav-link-label {
@@ -296,16 +294,18 @@ const clearCategoryFilters = () => {
 }
 
 .unread-count-pill {
+  padding: 2px 7px;
+  border-radius: 10px;
+  background-color: var(--app-primary, #2640DB);
+  color: #ffffff;
   font-size: 11px;
   font-weight: 700;
-  background-color: #ef4444;
-  color: #ffffff;
-  padding: 1px 7px;
-  border-radius: 10px;
+  line-height: 1.2;
 }
 
-.disabled-link {
-  opacity: 0.65;
+/* Explore Maps Disabled State */
+.sidebar-nav-link.disabled-link {
+  opacity: 0.55;
   cursor: default;
 }
 
@@ -313,11 +313,11 @@ const clearCategoryFilters = () => {
   font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.3px;
-  background: var(--app-surface-tertiary, #E8ECEF);
-  color: var(--app-text-tertiary);
+  letter-spacing: 0.4px;
   padding: 2px 6px;
   border-radius: 6px;
+  background-color: var(--app-surface-secondary, rgba(20, 25, 30, 0.05));
+  color: var(--app-text-tertiary);
 }
 
 /* Divider */
@@ -325,10 +325,10 @@ const clearCategoryFilters = () => {
   width: 100%;
   height: 1px;
   background-color: var(--app-border, rgba(20, 25, 30, 0.08));
-  margin: 18px 0;
+  margin: 18px 0 16px 0;
 }
 
-/* Filters Section */
+/* Category Filters Section */
 .sidebar-filter-section {
   width: 100%;
   display: flex;
@@ -339,14 +339,15 @@ const clearCategoryFilters = () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 14px 10px 14px;
+  padding: 0 8px;
+  margin-bottom: 8px;
 }
 
 .filter-heading {
   font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.6px;
+  letter-spacing: 0.5px;
   color: var(--app-text-tertiary);
 }
 
@@ -355,7 +356,7 @@ const clearCategoryFilters = () => {
   border: none;
   font-size: 12px;
   font-weight: 600;
-  color: var(--app-primary);
+  color: var(--app-primary, #2640DB);
   cursor: pointer;
   padding: 0;
 }
@@ -364,83 +365,99 @@ const clearCategoryFilters = () => {
   text-decoration: underline;
 }
 
-.categories-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+/* Category Filter Vertical List */
+.category-filter-list {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  width: 100%;
 }
 
-.category-filter-item {
+.category-filter-row {
   width: 100%;
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 8px 14px;
+  padding: 8px 12px;
   border-radius: 10px;
   background: transparent;
   border: none;
   cursor: pointer;
   color: var(--app-text-secondary);
-  font-size: 14px;
-  font-weight: 450;
+  font-size: 13.5px;
+  font-weight: 500;
+  letter-spacing: -0.1px;
   text-align: left;
   transition: background-color 0.15s ease, color 0.15s ease;
+  user-select: none;
 }
 
-.category-filter-item:hover {
+.category-filter-row:hover {
   background-color: var(--app-surface-secondary);
   color: var(--app-text-primary);
 }
 
-.category-filter-item.selected {
-  background-color: var(--app-primary-soft, rgba(38, 64, 219, 0.10));
+.category-filter-row.active {
+  background-color: var(--app-primary-soft, rgba(38, 64, 219, 0.08));
   color: var(--app-primary, #2640DB);
   font-weight: 600;
 }
 
-.category-bullet {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background-color: var(--app-text-tertiary);
-  transition: background-color 0.15s ease, transform 0.15s ease;
-}
-
-.category-filter-item.selected .category-bullet {
-  background-color: var(--app-primary);
-  transform: scale(1.3);
-}
-
-.category-name {
-  flex: 1;
-}
-
-.show-more-toggle-btn {
-  display: inline-flex;
+.cat-icon-wrap {
+  display: flex;
   align-items: center;
-  gap: 6px;
-  margin-top: 6px;
-  padding: 8px 14px;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.cat-row-icon {
+  color: var(--app-text-tertiary);
+  transition: color 0.15s ease;
+}
+
+.category-filter-row:hover .cat-row-icon {
+  color: var(--app-text-primary);
+}
+
+.category-filter-row.active .cat-row-icon {
+  color: var(--app-primary, #2640DB);
+}
+
+.cat-row-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Expand / Collapse Row */
+.expand-categories-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-radius: 10px;
   background: transparent;
   border: none;
   color: var(--app-text-tertiary);
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 12.5px;
+  font-weight: 550;
   cursor: pointer;
-  border-radius: 8px;
-  transition: color 0.15s ease, background-color 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease;
+  margin-top: 4px;
+  user-select: none;
 }
 
-.show-more-toggle-btn:hover {
-  color: var(--app-text-primary);
+.expand-categories-row:hover {
   background-color: var(--app-surface-secondary);
+  color: var(--app-text-primary);
 }
 
-.show-more-toggle-btn:focus-visible {
-  outline: 2px solid var(--app-primary);
-  outline-offset: 1px;
+.expand-toggle-icon {
+  color: inherit;
 }
 </style>
+
