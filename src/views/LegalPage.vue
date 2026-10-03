@@ -3,7 +3,7 @@
     <PageHeader
       title="Legal & Privacy"
       :show-back="true"
-      default-back-url="/tabs/profile"
+      default-back-url="/profile"
     />
 
     <ion-content :fullscreen="false" :force-overscroll="false" class="legal-content">

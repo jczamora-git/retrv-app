@@ -19,7 +19,7 @@
             type="button"
             class="header-post-btn"
             :class="{ 'retry-btn': submissionState === 'failed' }"
-            :disabled="!isValid || submissionState === 'sending'"
+            :disabled="!isValid || submissionState === 'sending' || hasPreparingMedia"
             @click="handleSubmit"
           >
             <ion-spinner v-if="submissionState === 'sending'" name="crescent" class="post-spinner" />
@@ -58,9 +58,10 @@
         <input
           ref="fileInputRef"
           type="file"
-          accept="image/jpeg,image/png,image/webp"
+          :accept="ACCEPT_FILE_INPUT_TYPES"
+          multiple
           class="hidden-file-input"
-          @change="onPhotoSelected"
+          @change="onFilesSelected"
         />
 
         <!-- Transition Panel Content -->
@@ -69,13 +70,15 @@
             v-if="currentPanel === 'compose'"
             :form="form"
             :current-profile="currentProfile"
-            :preview-photo-url="previewPhotoUrl"
+            :media-items="form.mediaItems"
+            :preview-photo-url="form.mediaItems?.[0]?.previewUrl || null"
             :photo-error="photoError"
             :errors="errors"
             :submitting="submitting"
             @open-panel="openPanel"
-            @trigger-photo="triggerPhotoPicker"
-            @remove-photo="removePhoto"
+            @trigger-media="triggerMediaPicker"
+            @remove-media="removeMedia"
+            @move-media="moveMedia"
             @update:type="(val) => form.type = val"
             @update:title="(val) => form.title = val"
             @update:description="(val) => form.description = val"
@@ -114,7 +117,18 @@ import ComposerDatePanel, { type DatePanelView } from "./post-composer/ComposerD
 import { useAuth } from "../composables/useAuth";
 import { usePosts } from "../composables/usePosts";
 import { generateClientRequestId } from "../utils/idempotency";
-import { validateImageFile } from "../utils/fileValidation";
+import { optimizeImage } from "../utils/media/imageOptimizer";
+import { extractVideoMetadata } from "../utils/media/videoMetadata";
+import {
+  MAX_MEDIA_ITEMS,
+  MAX_VIDEO_ITEMS,
+  MAX_IMAGE_ORIGINAL_SIZE_BYTES,
+  MAX_VIDEO_ORIGINAL_SIZE_BYTES,
+  ALLOWED_IMAGE_TYPES,
+  ALLOWED_VIDEO_TYPES,
+  ACCEPT_FILE_INPUT_TYPES
+} from "../config/mediaLimits";
+import type { ComposerMediaItem } from "../types/media";
 import {
   type PostFormData,
   type PostFormErrors,
@@ -206,7 +220,6 @@ const submissionState = ref<"idle" | "sending" | "failed" | "sent">("idle");
 const activeClientRequestId = ref<string>(generateClientRequestId());
 const submitting = computed(() => submissionState.value === "sending");
 const fileInputRef = ref<HTMLInputElement | null>(null);
-const previewPhotoUrl = ref("");
 const photoError = ref("");
 
 const form = reactive<PostFormData>({
@@ -221,10 +234,15 @@ const form = reactive<PostFormData>({
   imageUrl: "",
   imageKey: "",
   imagePath: "",
-  imageFile: null
+  imageFile: null,
+  mediaItems: []
 });
 
 const errors = reactive<PostFormErrors>({});
+
+const hasPreparingMedia = computed(() => {
+  return (form.mediaItems || []).some((m) => m.status === "preparing");
+});
 
 const isValid = computed(() => {
   return (
@@ -243,13 +261,24 @@ watch(
   }
 );
 
+const revokeAllMediaUrls = () => {
+  if (form.mediaItems) {
+    for (const item of form.mediaItems) {
+      if (item.previewUrl?.startsWith("blob:")) {
+        URL.revokeObjectURL(item.previewUrl);
+      }
+      if (item.thumbnailUrl?.startsWith("blob:")) {
+        URL.revokeObjectURL(item.thumbnailUrl);
+      }
+    }
+  }
+};
+
 watch(
   () => props.isOpen,
   (open) => {
     if (open) {
-      if (previewPhotoUrl.value?.startsWith("blob:")) {
-        URL.revokeObjectURL(previewPhotoUrl.value);
-      }
+      revokeAllMediaUrls();
       submissionState.value = "idle";
       activeClientRequestId.value = generateClientRequestId();
       currentPanel.value = "compose";
@@ -265,7 +294,7 @@ watch(
       form.imageKey = "";
       form.imagePath = "";
       form.imageFile = null;
-      previewPhotoUrl.value = "";
+      form.mediaItems = [];
       photoError.value = "";
       if (fileInputRef.value) fileInputRef.value.value = "";
       Object.keys(errors).forEach((k) => delete errors[k as keyof PostFormData]);
@@ -284,48 +313,167 @@ const handleDismiss = () => {
   emit("close");
 };
 
-const triggerPhotoPicker = () => {
+const triggerMediaPicker = () => {
   fileInputRef.value?.click();
 };
 
-const onPhotoSelected = (event: Event) => {
-  const target = event.target as HTMLInputElement;
-  const file = target.files?.[0];
-  if (!file) return;
+const showToast = async (message: string, color: "warning" | "danger" | "success" = "warning") => {
+  const toast = await toastController.create({
+    message,
+    duration: 3000,
+    position: "top",
+    color
+  });
+  await toast.present();
+};
 
-  const validation = validateImageFile(file);
-  if (!validation.valid) {
-    photoError.value = validation.error || "Please select a valid image.";
+const onFilesSelected = async (event: Event) => {
+  const target = event.target as HTMLInputElement;
+  const files = Array.from(target.files || []);
+  if (!files.length) return;
+
+  photoError.value = "";
+  if (!form.mediaItems) {
+    form.mediaItems = [];
+  }
+
+  const currentTotal = form.mediaItems.length;
+  const currentVideos = form.mediaItems.filter((m) => m.type === "video").length;
+
+  const availableSlots = MAX_MEDIA_ITEMS - currentTotal;
+  if (availableSlots <= 0) {
+    await showToast(`Maximum ${MAX_MEDIA_ITEMS} media items allowed per post.`);
     if (fileInputRef.value) fileInputRef.value.value = "";
     return;
   }
 
-  if (previewPhotoUrl.value?.startsWith("blob:")) {
-    URL.revokeObjectURL(previewPhotoUrl.value);
+  const filesToProcess: File[] = [];
+  let videoSlotBudget = MAX_VIDEO_ITEMS - currentVideos;
+
+  for (const file of files) {
+    if (filesToProcess.length >= availableSlots) {
+      await showToast(`Only first ${availableSlots} files added (max ${MAX_MEDIA_ITEMS} items).`);
+      break;
+    }
+
+    const isImage = ALLOWED_IMAGE_TYPES.includes(file.type);
+    const isVideo = ALLOWED_VIDEO_TYPES.includes(file.type);
+
+    if (!isImage && !isVideo) {
+      await showToast(`Unsupported file type: ${file.name}`);
+      continue;
+    }
+
+    if (isVideo) {
+      if (videoSlotBudget <= 0) {
+        await showToast(`Maximum ${MAX_VIDEO_ITEMS} videos allowed per post.`);
+        continue;
+      }
+      if (file.size > MAX_VIDEO_ORIGINAL_SIZE_BYTES) {
+        await showToast(`Video "${file.name}" exceeds max 100MB limit.`);
+        continue;
+      }
+      videoSlotBudget--;
+      filesToProcess.push(file);
+    } else if (isImage) {
+      if (file.size > MAX_IMAGE_ORIGINAL_SIZE_BYTES) {
+        await showToast(`Image "${file.name}" exceeds max 20MB limit.`);
+        continue;
+      }
+      filesToProcess.push(file);
+    }
   }
 
-  form.imageFile = file;
-  form.imageUrl = "";
-  previewPhotoUrl.value = URL.createObjectURL(file);
-  photoError.value = "";
+  // Clear input value so same files can be re-selected if removed
+  if (fileInputRef.value) fileInputRef.value.value = "";
+
+  // Process files with concurrency 2
+  for (const file of filesToProcess) {
+    const isVideo = ALLOWED_VIDEO_TYPES.includes(file.type);
+    const tempId = `media_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+    const placeholderItem: ComposerMediaItem = {
+      id: tempId,
+      file,
+      type: isVideo ? "video" : "image",
+      previewUrl: URL.createObjectURL(file),
+      originalSize: file.size,
+      status: "preparing"
+    };
+
+    form.mediaItems.push(placeholderItem);
+
+    // Run optimization asynchronously
+    (async () => {
+      const idx = form.mediaItems?.findIndex((m) => m.id === tempId);
+      if (idx === undefined || idx === -1 || !form.mediaItems) return;
+
+      try {
+        if (isVideo) {
+          const metadata = await extractVideoMetadata(file);
+          const currentItem = form.mediaItems[idx];
+          if (currentItem) {
+            currentItem.duration = metadata.duration;
+            currentItem.width = metadata.width;
+            currentItem.height = metadata.height;
+            currentItem.thumbnailUrl = metadata.posterUrl;
+            currentItem.status = "ready";
+          }
+        } else {
+          const optResult = await optimizeImage(file);
+          const currentItem = form.mediaItems[idx];
+          if (currentItem) {
+            // Revoke raw file URL and use optimized preview
+            if (currentItem.previewUrl.startsWith("blob:")) {
+              URL.revokeObjectURL(currentItem.previewUrl);
+            }
+            currentItem.previewUrl = optResult.previewUrl;
+            currentItem.optimizedFile = optResult.optimizedFile;
+            currentItem.width = optResult.width;
+            currentItem.height = optResult.height;
+            currentItem.optimizedSize = optResult.optimizedSize;
+            currentItem.status = "ready";
+          }
+        }
+      } catch (err: any) {
+        console.error(`[PostComposer] Failed to optimize ${file.name}:`, err);
+        const currentItem = form.mediaItems[idx];
+        if (currentItem) {
+          currentItem.status = "error";
+          currentItem.error = err?.message || "Optimization failed";
+        }
+        await showToast(err?.message || `Failed to process ${file.name}`, "danger");
+      }
+    })();
+  }
 };
 
-const removePhoto = () => {
-  if (previewPhotoUrl.value?.startsWith("blob:")) {
-    URL.revokeObjectURL(previewPhotoUrl.value);
+const removeMedia = (id: string) => {
+  if (!form.mediaItems) return;
+  const idx = form.mediaItems.findIndex((m) => m.id === id);
+  if (idx !== -1) {
+    const item = form.mediaItems[idx];
+    if (item.previewUrl?.startsWith("blob:")) {
+      URL.revokeObjectURL(item.previewUrl);
+    }
+    if (item.thumbnailUrl?.startsWith("blob:")) {
+      URL.revokeObjectURL(item.thumbnailUrl);
+    }
+    form.mediaItems.splice(idx, 1);
   }
-  form.imageFile = null;
-  form.imageUrl = "";
-  form.imageKey = "";
-  previewPhotoUrl.value = "";
-  photoError.value = "";
-  if (fileInputRef.value) fileInputRef.value.value = "";
+};
+
+const moveMedia = (index: number, direction: number) => {
+  if (!form.mediaItems) return;
+  const targetIndex = index + direction;
+  if (targetIndex < 0 || targetIndex >= form.mediaItems.length) return;
+
+  const item = form.mediaItems.splice(index, 1)[0];
+  form.mediaItems.splice(targetIndex, 0, item);
 };
 
 onUnmounted(() => {
-  if (previewPhotoUrl.value?.startsWith("blob:")) {
-    URL.revokeObjectURL(previewPhotoUrl.value);
-  }
+  revokeAllMediaUrls();
 });
 
 const validate = (): boolean => {
@@ -357,7 +505,7 @@ const validate = (): boolean => {
 };
 
 const handleSubmit = async () => {
-  if (submissionState.value === "sending" || !validate()) return;
+  if (submissionState.value === "sending" || hasPreparingMedia.value || !validate()) return;
   submissionState.value = "sending";
 
   try {
@@ -368,17 +516,12 @@ const handleSubmit = async () => {
       ...form,
       imageUrl: validRemoteImageUrl,
       imageFile: form.imageFile || null,
+      mediaItems: form.mediaItems || [],
       clientRequestId: activeClientRequestId.value
     };
 
     const newPostId = await createPost(payload);
     submissionState.value = "sent";
-
-    // If an image was uploaded, cache it locally
-    if (payload.imageUrl) {
-      form.imageUrl = payload.imageUrl;
-      form.imageFile = null;
-    }
 
     const toast = await toastController.create({
       message: `${form.type === "found" ? "Found" : "Lost"} report posted successfully!`,

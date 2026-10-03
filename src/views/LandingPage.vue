@@ -66,7 +66,7 @@ const { isAuthenticated } = useAuth();
 
 const handleJoinCommunity = () => {
   if (isAuthenticated.value) {
-    router.push('/tabs/home');
+    router.push({ name: 'Home' });
   } else {
     router.push('/auth');
   }
@@ -79,7 +79,7 @@ const handleJoinCommunity = () => {
   --background: #ffffff;
   background-color: #ffffff;
   color: #0f172a;
-  font-family: var(--ion-font-family, -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", system-ui, sans-serif);
+  font-family: var(--app-font-family);
 }
 
 .landing-content {

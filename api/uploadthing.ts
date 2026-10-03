@@ -59,6 +59,32 @@ const uploadRouter = {
       };
     }),
 
+  postMediaUploader: f({
+    image: {
+      maxFileSize: '16MB',
+      maxFileCount: 10
+    },
+    video: {
+      maxFileSize: '64MB',
+      maxFileCount: 3
+    }
+  })
+    .middleware(async ({ req }) => {
+      const authHeader = req.headers.get('authorization') || req.headers.get('Authorization') || '';
+      const devUid = req.headers.get('x-dev-uid') || req.headers.get('x-auth-token') || '';
+      const userId = devUid.replace(/^dev_/, '') || authHeader.replace(/^Bearer (dev_)?/, '') || 'anonymous_user';
+      return { userId };
+    })
+    .onUploadComplete(async ({ metadata, file }) => {
+      const fileUrl = (file as any).ufsUrl || file.url;
+      console.log(`[UploadThing] Post media uploaded by ${metadata.userId} -> Key: ${file.key}`);
+      return {
+        uploadedBy: metadata.userId,
+        fileKey: file.key,
+        fileUrl
+      };
+    }),
+
   messageImageUploader: f({
     image: {
       maxFileSize: '8MB',

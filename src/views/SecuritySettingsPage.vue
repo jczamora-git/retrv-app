@@ -4,7 +4,6 @@
       title="Password &amp; Security"
       :show-back="true"
       default-back-url="/settings"
-      @back="router.replace('/settings')"
     />
 
     <ion-content :fullscreen="false" :force-overscroll="false" class="security-settings-content">

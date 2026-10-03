@@ -1,6 +1,9 @@
 <template>
-  <div class="desktop-web-shell">
-    <!-- Sticky Desktop Header -->
+  <div
+    class="desktop-web-shell"
+    :class="{ 'is-messages-route': currentTab === 'messages' }"
+  >
+    <!-- Sticky Desktop Header (Visible on all routes) -->
     <header class="desktop-header-wrap">
       <DesktopHeader
         :unread-count="unreadCount"
@@ -9,33 +12,53 @@
       />
     </header>
 
-    <!-- Fixed Left Navigation Column -->
-    <aside class="desktop-nav-column" aria-label="Desktop Navigation">
+    <!-- Fixed Left Navigation Column (Hidden on Messages and Profile) -->
+    <aside
+      v-if="showNavSidebar"
+      class="desktop-nav-column"
+      aria-label="Desktop Navigation"
+    >
       <DesktopNavSidebar
         :current-tab="currentTab"
         @select-tab="(tab) => emit('select-tab', tab)"
       />
     </aside>
 
-    <!-- Structural Fixed Vertical Divider -->
+    <!-- Structural Fixed Vertical Divider (Hidden on Messages and Profile) -->
     <div
+      v-if="showNavSidebar"
       class="desktop-vertical-divider"
       role="separator"
       aria-orientation="vertical"
       aria-hidden="true"
     ></div>
 
-    <!-- Desktop Content Area (Offset past fixed left nav) -->
-    <div class="desktop-content-area">
-      <!-- Center Main Column (Participates in document page flow) -->
-      <main class="desktop-main-column">
-        <div class="desktop-main-viewport">
+    <!-- Desktop Content Area (Offset past left nav when sidebar is visible; Full-width when no sidebar) -->
+    <div
+      class="desktop-content-area"
+      :class="{
+        'is-messages-tab': currentTab === 'messages',
+        'no-sidebar': !showNavSidebar
+      }"
+    >
+      <!-- Center Main Column -->
+      <main
+        class="desktop-main-column"
+        :class="{ 'full-width': currentTab === 'messages' || !showNavSidebar || !showContextRail }"
+      >
+        <div
+          class="desktop-main-viewport"
+          :class="{ 'full-width': currentTab === 'messages' || !showNavSidebar || !showContextRail }"
+        >
           <slot />
         </div>
       </main>
 
-      <!-- Right Supporting Context Rail (Sticky) -->
-      <aside v-if="showContextRail" class="desktop-context-column">
+      <!-- Right Supporting Context Rail (Sticky, Hidden on Messages & Profile) -->
+      <aside
+        v-if="showContextRail && currentTab !== 'messages' && currentTab !== 'profile'"
+        class="desktop-context-column"
+      >
         <slot name="context-rail">
           <DesktopContextRail />
         </slot>
@@ -45,15 +68,17 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from "vue";
 import DesktopHeader from "./DesktopHeader.vue";
 import DesktopNavSidebar from "./DesktopNavSidebar.vue";
 import DesktopContextRail from "./DesktopContextRail.vue";
 
-withDefaults(
+const props = withDefaults(
   defineProps<{
-    currentTab?: "home" | "messages" | "profile";
+    currentTab?: "home" | "messages" | "profile" | "notifications";
     unreadCount?: number;
     showContextRail?: boolean;
+    showSidebar?: boolean;
   }>(),
   {
     currentTab: "home",
@@ -67,6 +92,11 @@ const emit = defineEmits<{
   "open-create": [];
   "open-notifications": [];
 }>();
+
+const showNavSidebar = computed(() => {
+  if (props.showSidebar !== undefined) return props.showSidebar;
+  return props.currentTab !== "messages" && props.currentTab !== "profile";
+});
 </script>
 
 <style scoped>
@@ -81,6 +111,11 @@ const emit = defineEmits<{
   display: flex;
   flex-direction: column;
   -webkit-overflow-scrolling: touch;
+}
+
+.desktop-web-shell.is-messages-route {
+  overflow: hidden;
+  height: 100vh;
 }
 
 .desktop-header-wrap {
@@ -130,6 +165,22 @@ const emit = defineEmits<{
   flex: 1;
 }
 
+/* Full Width when Sidebar is Hidden (Profile & Messages) */
+.desktop-content-area.no-sidebar {
+  margin-left: 0;
+  width: 100%;
+  padding: 0 24px;
+}
+
+/* Messages Route: Expand to full width with zero left offset */
+.desktop-content-area.is-messages-tab {
+  margin-left: 0;
+  width: 100%;
+  padding: 0;
+  height: calc(100vh - var(--desktop-header-height, 64px));
+  overflow: hidden;
+}
+
 .desktop-main-column {
   flex: 1;
   display: flex;
@@ -140,10 +191,24 @@ const emit = defineEmits<{
   padding-top: 4px;
 }
 
+.desktop-main-column.full-width {
+  width: 100%;
+  max-width: 100%;
+  gap: 0;
+  padding-top: 0;
+  height: 100%;
+}
+
 .desktop-main-viewport {
   width: 100%;
   max-width: var(--desktop-feed-width, 680px);
   min-width: 0;
+}
+
+.desktop-main-viewport.full-width {
+  max-width: 100%;
+  width: 100%;
+  height: 100%;
 }
 
 .desktop-context-column {
@@ -163,4 +228,3 @@ const emit = defineEmits<{
   }
 }
 </style>
-

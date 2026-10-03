@@ -73,7 +73,7 @@ import { useMessageUnread } from "../composables/useMessageUnread";
 
 withDefaults(
   defineProps<{
-    currentTab?: "home" | "messages" | "profile";
+    currentTab?: "home" | "messages" | "profile" | "notifications";
   }>(),
   {
     currentTab: "home"

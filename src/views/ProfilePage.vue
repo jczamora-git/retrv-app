@@ -71,7 +71,7 @@
               <button
                 type="button"
                 class="hero-cta-btn"
-                @click="router.push('/edit-profile')"
+                @click="router.push({ name: 'EditProfile' })"
               >
                 <Pencil :size="16" class="cta-icon" />
                 <span>Edit Profile</span>
@@ -82,7 +82,7 @@
                 class="hero-settings-btn"
                 aria-label="Profile settings"
                 title="Settings"
-                @click="router.push('/settings')"
+                @click="router.push({ name: 'Settings' })"
               >
                 <Settings :size="20" />
               </button>

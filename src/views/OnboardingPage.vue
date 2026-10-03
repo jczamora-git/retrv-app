@@ -186,7 +186,7 @@ const handleSubmit = async () => {
     });
     await toast.present();
 
-    router.replace("/tabs/home");
+    router.replace({ name: "Home" });
   } catch (err: any) {
     console.error("Onboarding error:", err);
     globalError.value = err.message || "Failed to create profile. Please try again.";

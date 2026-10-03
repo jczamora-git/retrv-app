@@ -32,7 +32,7 @@
         <AlertCircle :size="36" class="not-found-icon" />
         <h2>Post Not Found</h2>
         <p>This item report may have been deleted or is no longer available.</p>
-        <button type="button" class="back-home-btn" @click="router.replace('/tabs/home')">
+        <button type="button" class="back-home-btn" @click="router.replace({ name: 'Home' })">
           Return to Home
         </button>
       </div>
@@ -62,18 +62,63 @@
         <!-- Post Title Directly Under Author -->
         <h1 class="thread-title">{{ post.title }}</h1>
 
-        <!-- Photo or Compact Placeholder (Aspect-ratio 4/3, no shadow) -->
-        <div v-if="post.imageUrl && !imageFailed" class="thread-media-box">
-          <img
-            :src="post.imageUrl"
-            :alt="post.title"
-            class="thread-img"
-            @error="imageFailed = true"
-          />
+        <!-- Multi-Media Gallery with Active Viewer + Thumbnail Strip -->
+        <div v-if="mediaList.length > 0 && !imageFailed" class="thread-gallery-wrapper">
+          <div class="thread-media-box">
+            <!-- Active Video -->
+            <video
+              v-if="activeMediaItem?.type === 'video'"
+              :key="activeMediaItem.url"
+              controls
+              playsinline
+              preload="metadata"
+              :poster="activeMediaItem.thumbnailUrl"
+              class="thread-video"
+            >
+              <source :src="activeMediaItem.url" />
+              Your browser does not support video playback.
+            </video>
+
+            <!-- Active Image -->
+            <img
+              v-else-if="activeMediaItem"
+              :key="activeMediaItem.url"
+              :src="activeMediaItem.url"
+              :alt="post.title"
+              class="thread-img"
+              @error="imageFailed = true"
+            />
+
+            <!-- Media Counter Overlay (if multiple) -->
+            <div v-if="mediaList.length > 1" class="gallery-counter-badge">
+              {{ selectedMediaIndex + 1 }} / {{ mediaList.length }}
+            </div>
+          </div>
+
+          <!-- Thumbnail Strip for Multi-Media Posts -->
+          <div v-if="mediaList.length > 1" class="gallery-thumbs-track">
+            <button
+              v-for="(item, idx) in mediaList"
+              :key="item.id || item.url || idx"
+              type="button"
+              class="gallery-thumb-btn"
+              :class="{ active: selectedMediaIndex === idx }"
+              @click="selectedMediaIndex = idx"
+            >
+              <img
+                :src="item.type === 'video' ? (item.thumbnailUrl || item.url) : item.url"
+                :alt="`Thumbnail ${idx + 1}`"
+                class="gallery-thumb-img"
+              />
+              <div v-if="item.type === 'video'" class="thumb-video-icon">
+                <Play :size="10" fill="currentColor" />
+              </div>
+            </button>
+          </div>
         </div>
         <div v-else class="thread-no-photo-box">
           <ImageIcon :size="22" class="placeholder-icon" aria-hidden="true" />
-          <span>No photo attached</span>
+          <span>No photo or video attached</span>
         </div>
 
         <!-- Description (Filtered against 'nan', null, empty; No outer card) -->
@@ -299,7 +344,8 @@ import {
   Share2,
   MessageCircle,
   SendHorizontal,
-  Award
+  Award,
+  Play
 } from "lucide-vue-next";
 import UserAvatar from "../components/UserAvatar.vue";
 import StatusBadge from "../components/StatusBadge.vue";
@@ -315,6 +361,7 @@ import { useProfiles, getProfileById, loadProfile } from "../composables/useProf
 import { useAchievements } from "../composables/useAchievements";
 import { createOrGetConversation } from "../composables/useConversations";
 import { hasValidDescription, type Post } from "../types/post";
+import type { PostMediaItem } from "../types/media";
 
 const activeReplyTarget = ref<ReplyTarget | null>(null);
 const commentComposerRef = ref<InstanceType<typeof CommentComposer> | null>(null);
@@ -335,6 +382,37 @@ const imageFailed = ref(false);
 const creatingChat = ref(false);
 const showResolveModal = ref(false);
 const resolvingPost = ref(false);
+const selectedMediaIndex = ref(0);
+
+const mediaList = computed<PostMediaItem[]>(() => {
+  if (!post.value) return [];
+  if (Array.isArray(post.value.photos) && post.value.photos.length > 0) {
+    return post.value.photos.map((item) => {
+      if (typeof item === "string") {
+        return {
+          url: item,
+          type: "image" as const
+        };
+      }
+      return item;
+    });
+  }
+  if (post.value.imageUrl) {
+    return [
+      {
+        url: post.value.imageUrl,
+        type: "image" as const
+      }
+    ];
+  }
+  return [];
+});
+
+const activeMediaItem = computed(() => {
+  if (mediaList.value.length === 0) return null;
+  const idx = Math.min(selectedMediaIndex.value, mediaList.value.length - 1);
+  return mediaList.value[Math.max(0, idx)];
+});
 
 watchEffect(() => {
   if (post.value?.authorId) {
@@ -714,7 +792,7 @@ const deleteAlertButtons = [
           color: "success"
         });
         await toast.present();
-        router.replace("/tabs/home");
+        router.replace({ name: "Home" });
       } catch (err: any) {
         const toast = await toastController.create({
           message: err.message || "Failed to delete post.",
@@ -892,7 +970,14 @@ const deleteAlertButtons = [
   line-height: 1.25;
 }
 
-/* Photo Area */
+/* Photo & Media Area */
+.thread-gallery-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
 .thread-media-box {
   width: 100%;
   border-radius: 14px;
@@ -901,6 +986,10 @@ const deleteAlertButtons = [
   border: 1px solid var(--app-card-border);
   aspect-ratio: 4 / 3;
   box-shadow: none;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .thread-img {
@@ -908,6 +997,82 @@ const deleteAlertButtons = [
   height: 100%;
   object-fit: cover;
   display: block;
+}
+
+.thread-video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000000;
+  display: block;
+}
+
+.gallery-counter-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.72);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 600;
+  backdrop-filter: blur(4px);
+  z-index: 2;
+}
+
+.gallery-thumbs-track {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 0 4px;
+  scrollbar-width: thin;
+}
+
+.gallery-thumb-btn {
+  position: relative;
+  flex-shrink: 0;
+  width: 58px;
+  height: 58px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 2px solid transparent;
+  padding: 0;
+  background: var(--app-surface-secondary);
+  cursor: pointer;
+  transition: border-color 0.15s ease, opacity 0.15s ease;
+  opacity: 0.7;
+}
+
+.gallery-thumb-btn:hover {
+  opacity: 0.9;
+}
+
+.gallery-thumb-btn.active {
+  border-color: var(--app-primary, #2640DB);
+  opacity: 1;
+}
+
+.gallery-thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.thumb-video-icon {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.75);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .thread-no-photo-box {

@@ -732,7 +732,7 @@ const handleOpenPost = (postId?: string) => {
 };
 
 const handleBack = () => {
-  router.replace('/tabs/messages');
+  router.replace({ name: "Messages" });
 };
 
 const handleOpenProfile = () => {

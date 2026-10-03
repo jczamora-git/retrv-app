@@ -62,40 +62,122 @@
       <span v-if="errors.description" class="field-error-text">{{ errors.description }}</span>
     </div>
 
-    <!-- Photo Attachment Preview or Add Photo Button -->
-    <div v-if="previewPhotoUrl" class="photo-preview-wrap">
-      <img :src="previewPhotoUrl" alt="Attached photo" class="preview-img" />
-      <div class="photo-overlay-actions">
+    <!-- Multi-Media Gallery / Tray Section -->
+    <div v-if="mediaItems && mediaItems.length > 0" class="media-gallery-section">
+      <!-- Media Header Row: Counter on Left, Compact "Add more" on Right -->
+      <div class="media-section-header">
+        <div class="media-header-left">
+          <span class="media-counter-badge">
+            {{ mediaItems.length }}/{{ maxMediaItems }} media
+            <span v-if="videoCount > 0" class="video-counter-sub">({{ videoCount }}/{{ maxVideoItems }} video)</span>
+          </span>
+          <span v-if="hasPreparingMedia" class="media-optimizing-notice">
+            <Loader2 :size="13" class="spin-icon" />
+            Optimizing...
+          </span>
+        </div>
+
         <button
+          v-if="mediaItems.length < maxMediaItems"
           type="button"
-          class="overlay-action-btn change-btn"
+          class="add-more-media-btn"
+          aria-label="Add more photos or videos"
           :disabled="submitting"
-          @click="$emit('trigger-photo')"
+          @click="$emit('trigger-media')"
         >
-          <Camera :size="14" />
-          <span>Change</span>
+          <Plus :size="14" class="add-more-icon" />
+          <span>Add more</span>
         </button>
-        <button
-          type="button"
-          class="overlay-action-btn remove-btn"
-          :disabled="submitting"
-          @click="$emit('remove-photo')"
+      </div>
+
+      <div
+        class="media-grid"
+        :class="{
+          'grid-single': mediaItems.length === 1,
+          'grid-two': mediaItems.length === 2,
+          'grid-three-four': mediaItems.length === 3 || mediaItems.length === 4,
+          'grid-many': mediaItems.length >= 5
+        }"
+      >
+        <div
+          v-for="(item, index) in mediaItems"
+          :key="item.id"
+          class="media-item-card"
+          :class="{ 'is-video': item.type === 'video', 'is-preparing': item.status === 'preparing' }"
         >
-          <Trash2 :size="14" />
-          <span>Remove</span>
-        </button>
+          <!-- Media Preview (Image or Video Poster) -->
+          <img
+            :src="item.type === 'video' ? (item.thumbnailUrl || item.previewUrl) : item.previewUrl"
+            :alt="`Attached media ${index + 1}`"
+            class="media-preview-element"
+          />
+
+          <!-- Video Indicator / Duration Badge -->
+          <div v-if="item.type === 'video'" class="video-badge">
+            <Play :size="11" class="video-badge-icon" fill="currentColor" />
+            <span v-if="item.duration">{{ formatDuration(item.duration) }}</span>
+          </div>
+
+          <!-- Preparing / Processing Overlay -->
+          <div v-if="item.status === 'preparing'" class="media-preparing-overlay">
+            <Loader2 :size="20" class="spin-icon" />
+            <span>Optimizing</span>
+          </div>
+
+          <!-- Cover Badge for Lead Media Item -->
+          <div v-if="index === 0 && mediaItems.length > 1" class="cover-badge">
+            Cover
+          </div>
+
+          <!-- Overlay Actions (Reorder & Remove) -->
+          <div class="media-overlay-actions">
+            <div v-if="mediaItems.length > 1" class="reorder-group">
+              <button
+                v-if="index > 0"
+                type="button"
+                class="media-action-btn move-btn"
+                title="Move left"
+                :disabled="submitting"
+                @click.stop="$emit('move-media', index, -1)"
+              >
+                <ChevronLeft :size="13" />
+              </button>
+              <button
+                v-if="index < mediaItems.length - 1"
+                type="button"
+                class="media-action-btn move-btn"
+                title="Move right"
+                :disabled="submitting"
+                @click.stop="$emit('move-media', index, 1)"
+              >
+                <ChevronRight :size="13" />
+              </button>
+            </div>
+
+            <button
+              type="button"
+              class="media-action-btn remove-btn"
+              title="Remove media"
+              :disabled="submitting"
+              @click.stop="$emit('remove-media', item.id)"
+            >
+              <Trash2 :size="13" />
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
+    <!-- Empty State: Add Media Button -->
     <div v-else class="photo-add-section">
       <button
         type="button"
         class="add-photo-btn"
         :disabled="submitting"
-        @click="$emit('trigger-photo')"
+        @click="$emit('trigger-media')"
       >
         <ImagePlus :size="18" />
-        <span>Add Photo</span>
+        <span>Add Photos / Videos</span>
       </button>
     </div>
 
@@ -182,25 +264,31 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import {
-  Camera,
   Trash2,
   ImagePlus,
   Tag,
   MapPin,
   CalendarDays,
+  ChevronLeft,
   ChevronRight,
-  Globe
+  Globe,
+  Plus,
+  Play,
+  Loader2
 } from "lucide-vue-next";
 import UserAvatar from "../UserAvatar.vue";
 import UploadDebugBanner from "../UploadDebugBanner.vue";
 import { getCategoryIcon } from "../../config/categoryIcons";
+import { MAX_MEDIA_ITEMS, MAX_VIDEO_ITEMS } from "../../config/mediaLimits";
 import type { Profile } from "../../types/profile";
 import type { PostFormData } from "../../types/post";
+import type { ComposerMediaItem } from "../../types/media";
 
 const props = defineProps<{
   form: PostFormData;
   currentProfile: Profile | null;
-  previewPhotoUrl: string | null;
+  mediaItems?: ComposerMediaItem[];
+  previewPhotoUrl?: string | null;
   photoError: string;
   errors: Record<string, string>;
   submitting: boolean;
@@ -208,13 +296,31 @@ const props = defineProps<{
 
 defineEmits<{
   (e: "open-panel", panel: "category" | "date"): void;
-  (e: "trigger-photo"): void;
-  (e: "remove-photo"): void;
+  (e: "trigger-media"): void;
+  (e: "remove-media", id: string): void;
+  (e: "move-media", index: number, direction: number): void;
   (e: "update:type", val: "lost" | "found"): void;
   (e: "update:title", val: string): void;
   (e: "update:description", val: string): void;
   (e: "update:location", val: string): void;
 }>();
+
+const maxMediaItems = MAX_MEDIA_ITEMS;
+const maxVideoItems = MAX_VIDEO_ITEMS;
+
+const videoCount = computed(() => {
+  return (props.mediaItems || []).filter((item) => item.type === "video").length;
+});
+
+const hasPreparingMedia = computed(() => {
+  return (props.mediaItems || []).some((item) => item.status === "preparing");
+});
+
+const formatDuration = (seconds: number): string => {
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs.toString().padStart(2, "0")}`;
+};
 
 const displayCategorySummary = computed(() => {
   if (!props.form.category) return "";
@@ -364,49 +470,243 @@ const formattedDisplayDate = computed(() => {
   color: var(--app-text-tertiary);
 }
 
-.photo-preview-wrap {
-  position: relative;
+/* Media Gallery Section */
+.media-gallery-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   width: 100%;
-  max-height: 220px;
-  border-radius: 12px;
-  overflow: hidden;
-  background: var(--app-surface-secondary);
 }
 
-.preview-img {
+.media-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 32px;
+}
+
+.media-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--app-text-secondary);
+}
+
+.media-counter-badge {
+  font-weight: 600;
+}
+
+.video-counter-sub {
+  font-weight: 400;
+  color: var(--app-text-tertiary);
+  margin-left: 2px;
+}
+
+.media-optimizing-notice {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--app-primary, #2640DB);
+  font-size: 12px;
+  font-weight: 550;
+}
+
+.spin-icon {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Compact Add More Button */
+.add-more-media-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: var(--app-surface-secondary);
+  border: 1px solid var(--app-border, rgba(20, 25, 30, 0.12));
+  color: var(--app-primary, #2640DB);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.add-more-media-btn:hover:not(:disabled) {
+  background: var(--app-surface-tertiary);
+  border-color: var(--app-primary, #2640DB);
+}
+
+.add-more-media-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.add-more-icon {
+  flex-shrink: 0;
+}
+
+.media-grid {
+  display: grid;
+  gap: 8px;
   width: 100%;
-  max-height: 220px;
+}
+
+/* 1 Item: Large preview */
+.media-grid.grid-single {
+  grid-template-columns: 1fr;
+  max-height: 240px;
+}
+
+.media-grid.grid-single .media-item-card {
+  height: 220px;
+}
+
+/* 2 Items: 2-column layout */
+.media-grid.grid-two {
+  grid-template-columns: 1fr 1fr;
+}
+
+.media-grid.grid-two .media-item-card {
+  height: 150px;
+}
+
+/* 3-4 Items: 2x2 grid */
+.media-grid.grid-three-four {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.media-grid.grid-three-four .media-item-card {
+  height: 120px;
+}
+
+/* 5+ Items: Compact gallery */
+.media-grid.grid-many {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.media-grid.grid-many .media-item-card {
+  height: 100px;
+}
+
+.media-item-card {
+  position: relative;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--app-surface-secondary);
+  border: 1px solid var(--app-border, rgba(20, 25, 30, 0.08));
+}
+
+.media-preview-element {
+  width: 100%;
+  height: 100%;
   object-fit: cover;
   display: block;
 }
 
-.photo-overlay-actions {
+/* Video Badge */
+.video-badge {
   position: absolute;
-  top: 8px;
-  right: 8px;
-  display: flex;
-  gap: 6px;
-}
-
-.overlay-action-btn {
+  bottom: 6px;
+  left: 6px;
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 4px 10px;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 600;
-  border: none;
-  cursor: pointer;
-  background: rgba(0, 0, 0, 0.65);
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.72);
   color: #ffffff;
+  font-size: 11px;
+  font-weight: 600;
   backdrop-filter: blur(4px);
 }
 
-.overlay-action-btn:hover {
+.video-badge-icon {
+  flex-shrink: 0;
+}
+
+/* Cover Badge */
+.cover-badge {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--app-primary, #2640DB);
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Preparing Overlay */
+.media-preparing-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: #ffffff;
+  font-size: 11.5px;
+  font-weight: 600;
+  backdrop-filter: blur(2px);
+}
+
+/* Overlay Actions */
+.media-overlay-actions {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.reorder-group {
+  display: flex;
+  gap: 2px;
+}
+
+.media-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.65);
+  color: #ffffff;
+  border: none;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  transition: background 0.15s ease;
+}
+
+.media-action-btn:hover {
   background: rgba(0, 0, 0, 0.85);
 }
 
+.media-action-btn.remove-btn:hover {
+  background: rgba(239, 68, 68, 0.9);
+}
+
+/* Photo Add Button (Empty State) */
 .photo-add-section {
   display: flex;
 }

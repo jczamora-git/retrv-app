@@ -4,8 +4,7 @@
     <PageHeader
       title="Settings"
       :show-back="true"
-      default-back-url="/tabs/profile"
-      @back="router.replace('/tabs/profile')"
+      default-back-url="/profile"
     />
 
     <ion-content :fullscreen="false" :force-overscroll="false" class="settings-content">
@@ -18,7 +17,7 @@
             <button
               type="button"
               class="settings-row-btn"
-              @click="router.push('/settings/notifications')"
+              @click="router.push({ name: 'NotificationSettings' })"
             >
               <div class="row-left">
                 <Bell :size="21" class="standalone-icon" />
@@ -101,7 +100,7 @@
             <button
               type="button"
               class="settings-row-btn"
-              @click="router.push('/settings/security')"
+              @click="router.push({ name: 'SecuritySettings' })"
             >
               <div class="row-left">
                 <LockKeyhole :size="21" class="standalone-icon" />
@@ -122,7 +121,7 @@
             <button
               type="button"
               class="settings-row-btn"
-              @click="router.push('/settings/help')"
+              @click="router.push({ name: 'HelpCenter' })"
             >
               <div class="row-left">
                 <CircleHelp :size="21" class="standalone-icon" />
@@ -144,7 +143,7 @@
             <button
               type="button"
               class="settings-row-btn"
-              @click="router.push('/legal/privacy')"
+              @click="router.push({ name: 'PrivacyPolicyLegal' })"
             >
               <div class="row-left">
                 <ShieldCheck :size="21" class="standalone-icon" />
@@ -159,7 +158,7 @@
             <button
               type="button"
               class="settings-row-btn"
-              @click="router.push('/legal/terms')"
+              @click="router.push({ name: 'TermsOfUseLegal' })"
             >
               <div class="row-left">
                 <FileText :size="21" class="standalone-icon" />
@@ -174,7 +173,7 @@
             <button
               type="button"
               class="settings-row-btn"
-              @click="router.push('/legal/community-guidelines')"
+              @click="router.push({ name: 'CommunityGuidelinesLegal' })"
             >
               <div class="row-left">
                 <UsersRound :size="21" class="standalone-icon" />

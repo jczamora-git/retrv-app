@@ -53,10 +53,12 @@ const router = useRouter();
 
 const handleBack = () => {
   emit('back');
-  if (props.defaultBackUrl) {
-    router.replace(props.defaultBackUrl);
-  } else {
+  if (window.history.state?.back) {
     router.back();
+  } else if (props.defaultBackUrl) {
+    router.push(props.defaultBackUrl);
+  } else {
+    router.push({ name: 'Home' });
   }
 };
 </script>

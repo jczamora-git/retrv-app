@@ -147,11 +147,11 @@ const handleClickNotification = async (item: AppNotification) => {
   if (item.type === 'message' && item.conversationId) {
     router.push(`/chat/${item.conversationId}`);
   } else if (item.type === 'merit' || item.type === 'merit_awarded') {
-    router.push('/tabs/profile');
+    router.push({ name: 'Profile' });
   } else if (item.postId) {
     router.push(`/post/${item.postId}`);
   } else {
-    router.push('/tabs/home');
+    router.push({ name: 'Home' });
   }
 };
 </script>

@@ -7,6 +7,7 @@ import { getAuthenticatedUser, isDevBypassEnabled, getDevSession } from './useAu
 export type OurFileRouter = {
   avatarUploader: any;
   postImageUploader: any;
+  postMediaUploader: any;
   messageImageUploader: any;
 };
 
@@ -17,7 +18,8 @@ export const ALLOWED_IMAGE_TYPES = [
 ];
 
 export const MAX_AVATAR_SIZE_BYTES = 4 * 1024 * 1024; // 4 MB
-export const MAX_POST_IMAGE_SIZE_BYTES = 8 * 1024 * 1024; // 8 MB
+export const MAX_POST_IMAGE_SIZE_BYTES = 16 * 1024 * 1024; // 16 MB
+export const MAX_POST_VIDEO_SIZE_BYTES = 64 * 1024 * 1024; // 64 MB
 export const MAX_MESSAGE_IMAGE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
 
 const API_BASE =
@@ -441,6 +443,62 @@ export function useImageUpload() {
     }
   };
 
+  /**
+   * Upload multiple post media files (images & videos) to UploadThing
+   */
+  const uploadPostMedia = async (
+    rawFiles: File[],
+    onProgress?: (progress: number) => void
+  ): Promise<Array<{ url: string; key: string }>> => {
+    if (!rawFiles || rawFiles.length === 0) return [];
+
+    isUploading.value = true;
+    uploadProgress.value = 0;
+    uploadError.value = null;
+
+    try {
+      const headers = await getUploadHeaders();
+      const { uploadFiles } = genUploader<OurFileRouter>({
+        url: uploadthingUrl,
+        package: 'ioniclostandfound'
+      });
+
+      const res = await uploadFiles('postMediaUploader' as any, {
+        files: rawFiles,
+        headers,
+        onUploadProgress: (p) => {
+          uploadProgress.value = p.progress;
+          if (onProgress) onProgress(p.progress);
+        }
+      });
+
+      if (!res || res.length === 0) {
+        throw new Error('Upload returned no file response');
+      }
+
+      return res.map((uploaded) => ({
+        url: (uploaded as any).ufsUrl || uploaded.url,
+        key: uploaded.key
+      }));
+    } catch (err: any) {
+      console.error('[UploadPostMedia Error]', err);
+      // If postMediaUploader route is not yet deployed on server, fallback to single postImageUploader
+      if (rawFiles.length === 1 && rawFiles[0].type.startsWith('image/')) {
+        const singleRes = await performUpload(
+          'postImageUploader',
+          rawFiles[0],
+          MAX_POST_IMAGE_SIZE_BYTES,
+          'Unable to upload photo. Please try again.'
+        );
+        return [singleRes];
+      }
+      uploadError.value = 'Failed to upload media files.';
+      throw new Error('Failed to upload media files. Please try again.');
+    } finally {
+      isUploading.value = false;
+    }
+  };
+
   return {
     isUploading,
     uploadProgress,
@@ -453,6 +511,7 @@ export function useImageUpload() {
     normalizeImageFile,
     uploadAvatar,
     uploadPostImage,
+    uploadPostMedia,
     uploadMessageImage,
     deleteUploadedFile
   };

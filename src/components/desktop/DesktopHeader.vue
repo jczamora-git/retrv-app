@@ -62,8 +62,9 @@
         <button
           type="button"
           class="desktop-icon-btn bell-btn"
+          :class="{ active: isNotificationsActive }"
           aria-label="Notifications"
-          @click="$emit('open-notifications')"
+          @click="handleNotificationsClick"
         >
           <Bell :size="20" class="action-icon" aria-hidden="true" />
           <span
@@ -96,7 +97,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { Search, Plus, Bell, X } from "lucide-vue-next";
 import UserAvatar from "../UserAvatar.vue";
 import { useAuth } from "../../composables/useAuth";
@@ -116,9 +117,12 @@ defineEmits<{
   "open-notifications": [];
 }>();
 
+const route = useRoute();
 const router = useRouter();
 const { currentProfile } = useAuth();
 const { searchQuery, clearSearch } = useFeedFilter();
+
+const isNotificationsActive = computed(() => route.name === "Notifications" || route.path.includes("/notifications"));
 
 const isSearchFocused = ref(false);
 const searchInputRef = ref<HTMLInputElement | null>(null);
@@ -131,11 +135,15 @@ const unreadBadgeFormatted = computed(() => {
 
 const handleBrandClick = () => {
   clearSearch();
-  router.push("/tabs/home");
+  router.push({ name: "Home" });
+};
+
+const handleNotificationsClick = () => {
+  router.push({ name: "Notifications" });
 };
 
 const handleProfileClick = () => {
-  router.push("/tabs/profile");
+  router.push({ name: "Profile" });
 };
 </script>
 
@@ -330,6 +338,12 @@ const handleProfileClick = () => {
   background-color: var(--app-surface-tertiary, #E8ECEF);
   color: var(--app-primary);
   transform: translateY(-1px);
+}
+
+.desktop-icon-btn.active {
+  background-color: var(--app-primary-soft, rgba(38, 64, 219, 0.12));
+  color: var(--app-primary, #2640DB);
+  border-color: rgba(38, 64, 219, 0.25);
 }
 
 .desktop-icon-btn:focus-visible {

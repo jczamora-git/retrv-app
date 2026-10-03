@@ -46,11 +46,17 @@
         </div>
       </div>
 
-      <!-- Calendar Surface -->
+      <!-- Calendar Surface (Clean / Minimal) -->
       <div class="calendar-surface">
         <!-- Weekday column headings -->
         <div class="weekdays-grid" role="row">
-          <span v-for="wd in weekdays" :key="wd" class="weekday-cell" role="columnheader">
+          <span
+            v-for="(wd, idx) in weekdays"
+            :key="wd"
+            class="weekday-cell"
+            :class="{ 'is-sunday': idx === 0 }"
+            role="columnheader"
+          >
             {{ wd }}
           </span>
         </div>
@@ -66,24 +72,27 @@
           ></div>
 
           <!-- Days of the month -->
-          <button
+          <div
             v-for="day in monthDays"
             :key="day.iso"
-            type="button"
-            class="calendar-day-btn"
-            :class="{
-              selected: day.iso === modelValue,
-              'is-today': day.isToday,
-              disabled: day.isDisabled
-            }"
-            :disabled="day.isDisabled"
-            :aria-label="day.ariaLabel"
-            :aria-pressed="day.iso === modelValue"
-            @click="onSelectDay(day.iso)"
+            class="day-cell-wrap"
           >
-            <span class="day-number">{{ day.dayNumber }}</span>
-            <span v-if="day.isToday" class="today-dot" aria-hidden="true"></span>
-          </button>
+            <button
+              type="button"
+              class="calendar-day-btn"
+              :class="{
+                selected: day.iso === modelValue,
+                'is-today': day.isToday,
+                disabled: day.isDisabled
+              }"
+              :disabled="day.isDisabled"
+              :aria-label="day.ariaLabel"
+              :aria-pressed="day.iso === modelValue"
+              @click="onSelectDay(day.iso)"
+            >
+              <span class="day-number">{{ day.dayNumber }}</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -109,7 +118,7 @@
           <span class="picker-title">Select Month & Year</span>
         </div>
 
-        <!-- Year Selector (Scrollable Horizontal / Grid) -->
+        <!-- Year Selector (Scrollable Horizontal Chips) -->
         <div class="year-select-section">
           <span class="section-label">Year</span>
           <div class="year-chips-scroll">
@@ -328,7 +337,7 @@ const onSelectDay = (iso: string) => {
 .composer-date-calendar {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
   width: 100%;
 }
 
@@ -337,6 +346,7 @@ const onSelectDay = (iso: string) => {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  padding: 0 4px;
 }
 
 .back-presets-btn {
@@ -346,7 +356,7 @@ const onSelectDay = (iso: string) => {
   background: transparent;
   border: none;
   color: var(--app-primary, #2640DB);
-  font-size: 13px;
+  font-size: 13.5px;
   font-weight: 600;
   cursor: pointer;
   padding: 4px 6px;
@@ -355,25 +365,25 @@ const onSelectDay = (iso: string) => {
 }
 
 .back-presets-btn:hover {
-  opacity: 0.85;
+  opacity: 0.8;
 }
 
 .month-nav-controls {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
 }
 
 .month-label-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  background: var(--app-surface-secondary);
-  border: 1px solid var(--app-border, rgba(20, 25, 30, 0.08));
-  border-radius: 8px;
-  padding: 4px 10px;
-  font-size: 13.5px;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 9999px;
+  font-size: 14.5px;
   font-weight: 700;
   color: var(--app-text-primary);
   cursor: pointer;
@@ -381,50 +391,55 @@ const onSelectDay = (iso: string) => {
 }
 
 .month-label-btn:hover {
-  background: var(--app-surface-tertiary);
+  background: var(--app-surface-secondary);
   color: var(--app-primary, #2640DB);
 }
 
 .month-label-chevron {
   color: var(--app-text-tertiary);
+  transition: color 0.15s ease;
 }
 
+.month-label-btn:hover .month-label-chevron {
+  color: var(--app-primary, #2640DB);
+}
+
+/* Circular Month Navigation Arrow Buttons */
 .month-nav-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  background: var(--app-surface-secondary);
-  border: 1px solid var(--app-border, rgba(20, 25, 30, 0.08));
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: transparent;
+  border: none;
   color: var(--app-text-primary);
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
 .month-nav-btn:hover:not(:disabled) {
-  background: var(--app-surface-tertiary);
+  background: var(--app-surface-secondary);
   color: var(--app-primary, #2640DB);
 }
 
 .month-nav-btn:disabled {
-  opacity: 0.35;
+  opacity: 0.28;
   cursor: not-allowed;
 }
 
-/* Calendar Surface */
+/* Calendar Surface (Minimal / Unboxed) */
 .calendar-surface {
-  background: var(--app-surface-secondary);
-  border: 1px solid var(--app-border, rgba(20, 25, 30, 0.08));
-  border-radius: 14px;
-  padding: 12px 10px;
+  background: transparent;
+  border: none;
+  padding: 0 4px;
 }
 
 .weekdays-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .weekday-cell {
@@ -432,32 +447,44 @@ const onSelectDay = (iso: string) => {
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.4px;
+  letter-spacing: 0.5px;
   color: var(--app-text-tertiary);
+}
+
+.weekday-cell.is-sunday {
+  color: var(--app-text-tertiary);
+  opacity: 0.9;
 }
 
 .days-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 4px;
+  row-gap: 8px;
 }
 
 .empty-cell {
-  height: 38px;
+  height: 42px;
 }
 
+.day-cell-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Circular Day Button */
 .calendar-day-btn {
   position: relative;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 38px;
-  border-radius: 10px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
   background: transparent;
-  border: 1px solid transparent;
+  border: 1.5px solid transparent;
   color: var(--app-text-primary);
-  font-size: 13.5px;
+  font-size: 14px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -465,57 +492,49 @@ const onSelectDay = (iso: string) => {
 }
 
 .calendar-day-btn:hover:not(.disabled):not(.selected) {
-  background: var(--app-surface-tertiary);
+  background: var(--app-surface-secondary);
 }
 
+/* Selected Date: Solid Retrv Blue Circle */
 .calendar-day-btn.selected {
   background: var(--app-primary, #2640DB);
+  border-color: var(--app-primary, #2640DB);
   color: #ffffff;
   font-weight: 700;
-  box-shadow: 0 2px 8px rgba(38, 64, 219, 0.28);
+  box-shadow: 0 2px 8px rgba(38, 64, 219, 0.32);
 }
 
+/* Today: Thin Primary Outline Circle if Not Selected */
 .calendar-day-btn.is-today:not(.selected) {
-  border-color: var(--app-primary-soft, rgba(38, 64, 219, 0.3));
+  border-color: var(--app-primary, #2640DB);
   font-weight: 700;
   color: var(--app-primary, #2640DB);
 }
 
 .calendar-day-btn.disabled {
-  opacity: 0.28;
+  opacity: 0.25;
   cursor: not-allowed;
   color: var(--app-text-tertiary);
 }
 
-.today-dot {
-  position: absolute;
-  bottom: 3px;
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background-color: var(--app-primary, #2640DB);
-}
-
-.calendar-day-btn.selected .today-dot {
-  background-color: #ffffff;
+.calendar-day-btn:focus-visible {
+  outline: 2px solid var(--app-primary, #2640DB);
+  outline-offset: 2px;
 }
 
 .range-hint {
   text-align: center;
   font-size: 12px;
   color: var(--app-text-tertiary);
-  padding-top: 2px;
+  padding-top: 4px;
 }
 
-/* Month & Year Picker Styles */
+/* Month & Year Picker Styles (Minimal / Integrated) */
 .month-year-picker-wrap {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  background: var(--app-surface-secondary);
-  border: 1px solid var(--app-border, rgba(20, 25, 30, 0.08));
-  border-radius: 14px;
-  padding: 14px;
+  gap: 16px;
+  padding: 4px;
 }
 
 .picker-top-bar {
@@ -525,7 +544,7 @@ const onSelectDay = (iso: string) => {
 }
 
 .picker-title {
-  font-size: 13.5px;
+  font-size: 14px;
   font-weight: 700;
   color: var(--app-text-primary);
 }
@@ -534,15 +553,15 @@ const onSelectDay = (iso: string) => {
   font-size: 11.5px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.4px;
+  letter-spacing: 0.5px;
   color: var(--app-text-tertiary);
-  margin-bottom: 6px;
+  margin-bottom: 8px;
   display: block;
 }
 
 .year-chips-scroll {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   overflow-x: auto;
   padding-bottom: 6px;
   scrollbar-width: thin;
@@ -560,9 +579,9 @@ const onSelectDay = (iso: string) => {
 
 .year-chip-btn {
   flex: 0 0 auto;
-  padding: 6px 14px;
-  border-radius: 8px;
-  background: var(--app-surface);
+  padding: 7px 16px;
+  border-radius: 9999px;
+  background: var(--app-surface-secondary);
   border: 1px solid var(--app-border, rgba(20, 25, 30, 0.08));
   font-size: 13px;
   font-weight: 600;
@@ -581,6 +600,7 @@ const onSelectDay = (iso: string) => {
   border-color: var(--app-primary, #2640DB);
   color: #ffffff;
   font-weight: 700;
+  box-shadow: 0 2px 6px rgba(38, 64, 219, 0.24);
 }
 
 .months-grid {
@@ -590,12 +610,12 @@ const onSelectDay = (iso: string) => {
 }
 
 .month-cell-btn {
-  height: 38px;
+  height: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 10px;
-  background: var(--app-surface);
+  border-radius: 12px;
+  background: var(--app-surface-secondary);
   border: 1px solid var(--app-border, rgba(20, 25, 30, 0.08));
   font-size: 13px;
   font-weight: 600;
@@ -614,12 +634,23 @@ const onSelectDay = (iso: string) => {
   border-color: var(--app-primary, #2640DB);
   color: #ffffff;
   font-weight: 700;
+  box-shadow: 0 2px 6px rgba(38, 64, 219, 0.24);
 }
 
 .month-cell-btn.disabled {
-  opacity: 0.35;
+  opacity: 0.3;
   cursor: not-allowed;
   color: var(--app-text-tertiary);
 }
-</style>
 
+@media (max-width: 380px) {
+  .calendar-day-btn {
+    width: 36px;
+    height: 36px;
+    font-size: 13px;
+  }
+  .empty-cell {
+    height: 36px;
+  }
+}
+</style>

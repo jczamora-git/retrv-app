@@ -151,11 +151,11 @@ export const handleNotificationAction = (action: ActionPerformed) => {
   if ((type === 'message' || conversationId) && conversationId) {
     currentRouter.push(`/chat/${conversationId}`);
   } else if (type === 'merit' || type === 'merit_awarded') {
-    currentRouter.push('/tabs/profile');
+    currentRouter.push({ name: 'Profile' });
   } else if (postId) {
     currentRouter.push(`/post/${postId}`);
   } else {
-    currentRouter.push('/tabs/home');
+    currentRouter.push({ name: 'Home' });
   }
 };
 

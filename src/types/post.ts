@@ -1,4 +1,5 @@
 import { CATEGORY_NAMES } from "../config/categories";
+import type { ComposerMediaItem, PostMediaItem } from "./media";
 
 export type PostType = "lost" | "found";
 
@@ -53,7 +54,7 @@ export interface Post {
   imageUrl?: string | null;
   imageKey?: string | null;
   imagePath?: string | null;
-  photos?: string[];
+  photos?: string[] | PostMediaItem[];
   status: PostStatus;
   helpfulCount?: number;
   commentsCount?: number;
@@ -80,6 +81,7 @@ export interface PostFormData {
   imageKey?: string | null;
   imagePath?: string | null;
   imageFile?: File | null;
+  mediaItems?: ComposerMediaItem[];
   removeImage?: boolean;
   clientRequestId?: string;
 }

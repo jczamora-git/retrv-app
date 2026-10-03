@@ -1,13 +1,28 @@
 <template>
-  <ion-page>
-    <!-- Fixed Header with Back Navigation -->
-    <PageHeader
-      title="Member Profile"
-      :show-back="true"
-      default-back-url="/tabs/home"
-    />
+  <ion-page class="public-profile-root-page">
+    <!-- DESKTOP WEB SHELL (>= 1200px) -->
+    <DesktopWebShell
+      v-if="isDesktop"
+      current-tab="profile"
+      :unread-count="unreadCount"
+      :show-context-rail="false"
+      @select-tab="(tab) => router.push(tab === 'home' ? { name: 'Home' } : tab === 'messages' ? { name: 'Messages' } : { name: 'Profile' })"
+      @open-create="showComposer = true"
+      @open-notifications="showNotificationsModal = true"
+    >
+      <DesktopProfilePage :user-id="targetProfileId" />
+    </DesktopWebShell>
 
-    <ion-content :fullscreen="false" :force-overscroll="false" class="public-content">
+    <!-- MOBILE / TABLET IONIC SHELL (< 1200px) -->
+    <div v-else class="mobile-public-profile-shell">
+      <!-- Fixed Header with Back Navigation -->
+      <PageHeader
+        title="Member Profile"
+        :show-back="true"
+        default-back-url="/"
+      />
+
+      <ion-content :fullscreen="false" :force-overscroll="false" class="public-content">
       <div class="ios-screen-container public-container">
         <div v-if="loading" class="public-loading">
           <ion-spinner name="crescent" />
@@ -140,11 +155,26 @@
         </template>
       </div>
     </ion-content>
-  </ion-page>
+  </div>
+
+  <PostComposerModal
+    v-if="isDesktop"
+    :is-open="showComposer"
+    initial-type="lost"
+    @close="showComposer = false"
+    @submit="handlePostSubmit"
+  />
+
+  <NotificationsModal
+    v-if="isDesktop"
+    :is-open="showNotificationsModal"
+    @close="showNotificationsModal = false"
+  />
+</ion-page>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {
   IonContent,
@@ -165,10 +195,15 @@ import PostCard from "../components/PostCard.vue";
 import PageHeader from "../components/PageHeader.vue";
 import AchievementsSection from "../components/AchievementsSection.vue";
 import AchievementBadge from "../components/AchievementBadge.vue";
+import PostComposerModal from "../components/PostComposerModal.vue";
+import NotificationsModal from "../components/NotificationsModal.vue";
+import DesktopWebShell from "../components/desktop/DesktopWebShell.vue";
+import DesktopProfilePage from "./desktop/DesktopProfilePage.vue";
 import { useAuth, getSessionUser, currentAppUserId } from "../composables/useAuth";
 import { useProfiles, loadProfile } from "../composables/useProfiles";
 import { usePosts } from "../composables/usePosts";
 import { useAchievements } from "../composables/useAchievements";
+import { useNotifications } from "../composables/useNotifications";
 import { createOrGetConversation } from "../composables/useConversations";
 import type { Post } from "../types/post";
 import type { Profile } from "../types/profile";
@@ -176,8 +211,56 @@ import type { Profile } from "../types/profile";
 const route = useRoute();
 const router = useRouter();
 const { currentProfile } = useAuth();
-const { posts, toggleHelpful, isHelpfulByMe } = usePosts();
+const { posts, toggleHelpful, isHelpfulByMe, createPost, fetchPosts } = usePosts();
 const { loadAchievementsForUser } = useAchievements();
+const { unreadCount } = useNotifications();
+
+const isDesktop = ref(
+  typeof window !== "undefined" ? window.matchMedia("(min-width: 1200px)").matches : false
+);
+
+let mediaQueryList: MediaQueryList | null = null;
+const handleMediaChange = (e: MediaQueryListEvent | MediaQueryList) => {
+  isDesktop.value = e.matches;
+};
+
+onMounted(() => {
+  if (typeof window !== "undefined") {
+    mediaQueryList = window.matchMedia("(min-width: 1200px)");
+    isDesktop.value = mediaQueryList.matches;
+    if (mediaQueryList.addEventListener) {
+      mediaQueryList.addEventListener("change", handleMediaChange);
+    } else {
+      mediaQueryList.addListener(handleMediaChange);
+    }
+  }
+});
+
+onUnmounted(() => {
+  if (mediaQueryList) {
+    if (mediaQueryList.removeEventListener) {
+      mediaQueryList.removeEventListener("change", handleMediaChange);
+    } else {
+      mediaQueryList.removeListener(handleMediaChange);
+    }
+    mediaQueryList = null;
+  }
+});
+
+const showComposer = ref(false);
+const showNotificationsModal = ref(false);
+
+const handlePostSubmit = async (payload: any) => {
+  try {
+    await createPost(payload);
+    showComposer.value = false;
+    await fetchPosts({ isRefresh: true });
+  } catch (err) {
+    if (import.meta.env.DEV) {
+      console.error("[PublicProfilePage] Failed to create post:", err);
+    }
+  }
+};
 
 const targetProfileId = computed(() => (((route.params as any).userId || route.params.uid) as string || "").trim());
 const uid = targetProfileId;

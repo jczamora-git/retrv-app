@@ -1,7 +1,7 @@
 <template>
   <ion-page>
     <!-- Fixed Header with Back Navigation -->
-    <PageHeader title="Edit Profile" :show-back="true" default-back-url="/tabs/profile" />
+    <PageHeader title="Edit Profile" :show-back="true" default-back-url="/profile" />
 
     <ion-content :fullscreen="false" :force-overscroll="false" class="edit-content">
       <div class="ios-screen-container edit-container">
@@ -300,7 +300,7 @@ const handleSave = async () => {
     });
     await toast.present();
 
-    router.replace("/tabs/profile");
+    router.replace({ name: "Profile" });
   } catch (err: any) {
     if (import.meta.env.DEV) {
       console.error("Update profile error:", err);

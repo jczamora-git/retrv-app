@@ -162,7 +162,7 @@ const INITIAL_CATEGORY_COUNT = 7;
 
 withDefaults(
   defineProps<{
-    currentTab?: "home" | "messages" | "profile";
+    currentTab?: "home" | "messages" | "profile" | "notifications";
   }>(),
   {
     currentTab: "home"
@@ -201,8 +201,8 @@ const handleMapsClick = () => {
 
 const handleCategoryClick = (categoryName: string) => {
   toggleCategory(categoryName);
-  if (!window.location.pathname.includes("/tabs/home")) {
-    router.push("/tabs/home");
+  if (router.currentRoute.value.name !== "Home" && router.currentRoute.value.path !== "/") {
+    router.push({ name: "Home" });
   }
 };
 

@@ -5,7 +5,6 @@
       :subtitle="policy?.effectiveDate ? `Effective ${policy.effectiveDate}` : undefined"
       :show-back="true"
       default-back-url="/settings"
-      @back="router.replace('/settings')"
     />
 
     <ion-content :fullscreen="false" :force-overscroll="false" class="policy-content">
@@ -13,7 +12,7 @@
         <article class="policy-article" v-html="renderedHtml"></article>
 
         <div class="policy-footer-nav">
-          <button type="button" class="back-to-legal-btn" @click="router.replace('/settings')">
+          <button type="button" class="back-to-legal-btn" @click="router.push({ name: 'Settings' })">
             <ArrowLeft :size="16" />
             <span>Back to Settings</span>
           </button>

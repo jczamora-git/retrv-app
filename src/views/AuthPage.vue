@@ -576,7 +576,7 @@ const handleSignIn = async () => {
       color: "success"
     });
     await toast.present();
-    router.replace("/tabs/home");
+    router.replace({ name: "Home" });
   } catch (err: any) {
     globalError.value = err.message || "Failed to sign in. Please verify your credentials.";
   } finally {
@@ -621,7 +621,7 @@ const handleCreateAccount = async () => {
       color: "success"
     });
     await toast.present();
-    router.replace("/tabs/home");
+    router.replace({ name: "Home" });
   } catch (err: any) {
     globalError.value = err.message || "Failed to create account. Please try again.";
   } finally {

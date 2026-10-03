@@ -3,11 +3,45 @@ import { RouteRecordRaw } from 'vue-router';
 import { useAuth } from '../composables/useAuth';
 
 const routes: Array<RouteRecordRaw> = [
+  // App Route Shell (Canonical user-facing routes without /tabs prefix)
   {
     path: '/',
+    component: () => import('../views/TabsPage.vue'),
+    children: [
+      {
+        path: '',
+        name: 'Home',
+        component: () => import('../views/HomePage.vue'),
+        meta: { desktopNav: true, desktopContextRail: true }
+      },
+      {
+        path: 'messages',
+        name: 'Messages',
+        component: () => import('../views/MessagesPage.vue'),
+        meta: { desktopNav: false, desktopContextRail: false }
+      },
+      {
+        path: 'profile',
+        name: 'Profile',
+        component: () => import('../views/ProfilePage.vue'),
+        meta: { desktopNav: false, desktopContextRail: false }
+      },
+      {
+        path: 'notifications',
+        name: 'Notifications',
+        component: () => import('../views/HomePage.vue'),
+        meta: { desktopNav: true, desktopContextRail: false }
+      }
+    ]
+  },
+  // Public standalone Landing / Welcome
+  {
+    path: '/landing',
+    alias: ['/welcome'],
     name: 'Landing',
     component: () => import('../views/LandingPage.vue')
   },
+  // Authentication & Onboarding
   {
     path: '/auth',
     name: 'Auth',
@@ -18,45 +52,24 @@ const routes: Array<RouteRecordRaw> = [
     name: 'Onboarding',
     component: () => import('../views/AuthPage.vue')
   },
-  {
-    path: '/tabs',
-    component: () => import('../views/TabsPage.vue'),
-    children: [
-      {
-        path: '',
-        redirect: '/tabs/home'
-      },
-      {
-        path: 'home',
-        name: 'Home',
-        component: () => import('../views/HomePage.vue')
-      },
-      {
-        path: 'messages',
-        name: 'Messages',
-        component: () => import('../views/MessagesPage.vue')
-      },
-      {
-        path: 'profile',
-        name: 'Profile',
-        component: () => import('../views/ProfilePage.vue')
-      }
-    ]
-  },
-  {
-    path: '/messages',
-    redirect: '/tabs/messages'
-  },
+  // Direct Messaging / Chat
   {
     path: '/chat/:conversationId',
     name: 'Chat',
     component: () => import('../views/ChatPage.vue')
   },
+  // Post Details & Editing
   {
     path: '/post/:id',
     name: 'PostDetails',
     component: () => import('../views/PostDetailsPage.vue')
   },
+  {
+    path: '/edit-post/:id',
+    name: 'EditPost',
+    component: () => import('../views/EditPostPage.vue')
+  },
+  // Member Public Profile & Editing
   {
     path: '/profile/:userId',
     alias: ['/profile/:uid'],
@@ -67,11 +80,6 @@ const routes: Array<RouteRecordRaw> = [
     path: '/edit-profile',
     name: 'EditProfile',
     component: () => import('../views/EditProfilePage.vue')
-  },
-  {
-    path: '/edit-post/:id',
-    name: 'EditPost',
-    component: () => import('../views/EditPostPage.vue')
   },
   // Dedicated Settings Pages
   {
@@ -94,7 +102,7 @@ const routes: Array<RouteRecordRaw> = [
     name: 'HelpCenter',
     component: () => import('../views/HelpCenterPage.vue')
   },
-  // Legal & Privacy
+  // Legal & Policies
   {
     path: '/legal',
     redirect: '/settings'
@@ -128,7 +136,6 @@ const routes: Array<RouteRecordRaw> = [
     name: 'LegalPolicy',
     component: () => import('../views/PolicyPage.vue')
   },
-  // Public standalone web policy routes
   {
     path: '/privacy',
     name: 'PrivacyPolicy',
@@ -153,18 +160,42 @@ const routes: Array<RouteRecordRaw> = [
     component: () => import('../views/PolicyPage.vue'),
     props: { policySlug: 'delete-account' }
   },
-  // Legacy route redirects
+  // Legacy /tabs redirects for backward compatibility
+  {
+    path: '/tabs/home',
+    redirect: '/'
+  },
+  {
+    path: '/tabs/messages',
+    redirect: '/messages'
+  },
+  {
+    path: '/tabs/profile',
+    redirect: '/profile'
+  },
+  {
+    path: '/tabs/notifications',
+    redirect: '/notifications'
+  },
+  {
+    path: '/tabs',
+    redirect: '/'
+  },
+  {
+    path: '/tabs/:pathMatch(.*)*',
+    redirect: '/'
+  },
   {
     path: '/items',
-    redirect: '/tabs/home'
+    redirect: '/'
   },
   {
     path: '/home',
-    redirect: '/tabs/home'
+    redirect: '/'
   },
   {
     path: '/activity',
-    redirect: '/tabs/profile'
+    redirect: '/profile'
   }
 ];
 
@@ -181,7 +212,8 @@ router.beforeEach(async (to, from, next) => {
   await initializeAuthSession();
 
   const isPublicRoute =
-    to.path === '/' ||
+    to.path === '/landing' ||
+    to.path === '/welcome' ||
     to.path === '/auth' ||
     to.path === '/onboarding' ||
     to.path.startsWith('/legal') ||
@@ -215,8 +247,8 @@ router.beforeEach(async (to, from, next) => {
     }
   } else {
     // 4. Authenticated non-anonymous user with full profile
-    if (to.path === '/auth' || to.path === '/onboarding') {
-      next('/tabs/home');
+    if (to.path === '/auth' || to.path === '/onboarding' || to.path === '/landing' || to.path === '/welcome') {
+      next('/');
     } else {
       next();
     }

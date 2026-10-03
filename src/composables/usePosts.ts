@@ -33,7 +33,29 @@ let activeFilterState: FetchPostsOptions = {};
 let inFlightPostsPromise: Promise<Post[]> | null = null;
 let realtimeChannelSubscribed = false;
 
+const normalizePhotoItem = (item: any): any => {
+  if (typeof item === "string") {
+    const isVideo = Boolean(item.match(/\.(mp4|webm|mov|quicktime)($|\?)/i));
+    return {
+      url: item,
+      type: isVideo ? "video" : "image"
+    };
+  }
+  if (item && typeof item === "object" && item.url) {
+    return item;
+  }
+  return null;
+};
+
 const mapPostRow = (row: any): Post => {
+  const rawPhotos = Array.isArray(row.photos)
+    ? row.photos
+    : row.image_url || row.imageUrl
+    ? [row.image_url || row.imageUrl]
+    : [];
+  const parsedPhotos = rawPhotos.map(normalizePhotoItem).filter(Boolean);
+  const firstPhotoUrl = parsedPhotos[0]?.url || row.image_url || row.imageUrl || undefined;
+
   return {
     id: row.id,
     authorId: row.author_id || row.authorId || "anonymous",
@@ -47,10 +69,10 @@ const mapPostRow = (row: any): Post => {
     description: row.description || "",
     location: row.location || "Unknown location",
     eventDate: row.event_date || row.eventDate || row.date || (row.created_at ? new Date(row.created_at).toISOString().split("T")[0] : new Date().toISOString().split("T")[0]),
-    imageUrl: row.image_url || row.imageUrl || (Array.isArray(row.photos) && row.photos[0]) || undefined,
+    imageUrl: firstPhotoUrl,
     imageKey: row.image_key || row.imageKey || undefined,
     imagePath: row.image_path || row.imagePath || undefined,
-    photos: Array.isArray(row.photos) ? row.photos : (row.image_url ? [row.image_url] : []),
+    photos: parsedPhotos.length > 0 ? parsedPhotos : (firstPhotoUrl ? [{ url: firstPhotoUrl, type: "image" }] : []),
     status: (row.status?.toLowerCase() === "resolved"
       ? "resolved"
       : row.status?.toLowerCase() === "returned" || row.status?.toLowerCase() === "claimed"
@@ -194,7 +216,7 @@ const resolvePendingSubcategory = async (
 
 export function usePosts() {
   const { currentProfile, currentUser } = useAuth();
-  const { uploadPostImage, deleteUploadedFile } = useImageUpload();
+  const { uploadPostImage, uploadPostMedia, deleteUploadedFile } = useImageUpload();
 
   const fetchPosts = async (options: FetchPostsOptions = {}): Promise<Post[]> => {
     const limitCount = options.limit || POSTS_PAGE_SIZE;
@@ -367,20 +389,62 @@ export function usePosts() {
 
     const clientReqId = data.clientRequestId || generateClientRequestId();
 
+    let finalPhotos: any[] = [];
     let finalImageUrl: string | null = null;
     let finalImageKey: string | null = null;
 
-    if (data.imageFile) {
+    if (data.mediaItems && data.mediaItems.length > 0) {
+      const filesToUpload: File[] = [];
+      const itemIndicesToUpload: number[] = [];
+
+      data.mediaItems.forEach((item, idx) => {
+        if (!item.remoteUrl) {
+          filesToUpload.push(item.optimizedFile || item.file);
+          itemIndicesToUpload.push(idx);
+        }
+      });
+
+      if (filesToUpload.length > 0) {
+        const uploadResults = await uploadPostMedia(filesToUpload);
+        uploadResults.forEach((res, i) => {
+          const itemIdx = itemIndicesToUpload[i];
+          if (data.mediaItems && data.mediaItems[itemIdx]) {
+            data.mediaItems[itemIdx].remoteUrl = res.url;
+            data.mediaItems[itemIdx].remoteKey = res.key;
+            data.mediaItems[itemIdx].status = "uploaded";
+          }
+        });
+      }
+
+      finalPhotos = data.mediaItems
+        .filter((item) => Boolean(item.remoteUrl))
+        .map((item) => ({
+          url: item.remoteUrl!,
+          key: item.remoteKey,
+          type: item.type,
+          thumbnailUrl: item.thumbnailUrl || (item.type === "image" ? item.remoteUrl : undefined),
+          width: item.width,
+          height: item.height,
+          duration: item.duration,
+          size: item.optimizedSize || item.originalSize
+        }));
+
+      if (finalPhotos.length > 0) {
+        finalImageUrl = finalPhotos[0].url;
+        finalImageKey = finalPhotos[0].key || null;
+      }
+    } else if (data.imageFile) {
       const uploadRes = await uploadPostImage(data.imageFile);
       finalImageUrl = uploadRes.url;
       finalImageKey = uploadRes.key;
-      // Cache uploaded image info on the form data object so retries won't re-upload
       data.imageUrl = finalImageUrl;
       data.imageKey = finalImageKey;
       data.imageFile = null;
+      finalPhotos = [{ url: finalImageUrl, key: finalImageKey, type: "image" }];
     } else if (data.imageUrl && !data.imageUrl.startsWith("blob:")) {
       finalImageUrl = data.imageUrl.trim();
       finalImageKey = data.imageKey || null;
+      finalPhotos = [{ url: finalImageUrl, key: finalImageKey, type: "image" }];
     }
 
     const postId = `post_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
@@ -416,7 +480,8 @@ export function usePosts() {
       subcategory: subCat,
       description: data.description.trim(),
       location: data.location.trim(),
-      photos: finalImageUrl ? [finalImageUrl] : [],
+      event_date: data.eventDate || now.split("T")[0],
+      photos: finalPhotos,
       status: "open",
       client_request_id: clientReqId,
       created_at: now,

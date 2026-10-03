@@ -25,16 +25,43 @@
     <!-- Item Title -->
     <h3 class="post-title">{{ post.title }}</h3>
 
-    <!-- Photo (if available) -->
-    <div v-if="post.imageUrl && !imageFailed" class="post-media-box">
-      <img
-        :src="post.imageUrl"
-        :alt="post.title"
-        class="post-image"
-        loading="lazy"
-        decoding="async"
-        @error="imageFailed = true"
-      />
+    <!-- Media Gallery (Single, Two-up, Grid, or +N Overflow) -->
+    <div
+      v-if="mediaList.length > 0 && !imageFailed"
+      class="post-media-box"
+      :class="{
+        'media-count-1': mediaList.length === 1,
+        'media-count-2': mediaList.length === 2,
+        'media-count-3': mediaList.length === 3,
+        'media-count-4': mediaList.length >= 4
+      }"
+    >
+      <div
+        v-for="(item, idx) in visibleMediaList"
+        :key="item.id || item.url || idx"
+        class="feed-media-cell"
+        :class="{ 'has-overflow': idx === 3 && overflowCount > 0 }"
+      >
+        <img
+          :src="item.type === 'video' ? (item.thumbnailUrl || item.url) : item.url"
+          :alt="`${post.title} media ${idx + 1}`"
+          class="post-image"
+          loading="lazy"
+          decoding="async"
+          @error="handleImageError"
+        />
+
+        <!-- Video Badge -->
+        <div v-if="item.type === 'video'" class="feed-video-badge">
+          <Play :size="12" class="video-icon" fill="currentColor" />
+          <span v-if="item.duration">{{ formatMediaDuration(item.duration) }}</span>
+        </div>
+
+        <!-- +N Overflow Overlay on 4th cell -->
+        <div v-if="idx === 3 && overflowCount > 0" class="feed-media-overflow">
+          <span>+{{ overflowCount }}</span>
+        </div>
+      </div>
     </div>
 
     <!-- Description Preview (Filtered against 'nan', null, empty) -->
@@ -150,13 +177,15 @@ import {
   Heart,
   MessageCircle,
   Share2,
-  Award
+  Award,
+  Play
 } from "lucide-vue-next";
 import UserAvatar from "./UserAvatar.vue";
 import StatusBadge from "./StatusBadge.vue";
 import ShareModal from "./ShareModal.vue";
 import AchievementBadge from "./AchievementBadge.vue";
 import { hasValidDescription, type Post } from "../types/post";
+import type { PostMediaItem } from "../types/media";
 import { useLatestComment } from "../composables/useLatestComment";
 import { getProfileById, loadProfile } from "../composables/useProfiles";
 
@@ -172,6 +201,48 @@ defineEmits<{
 const router = useRouter();
 const imageFailed = ref(false);
 const showShareModal = ref(false);
+
+const mediaList = computed<PostMediaItem[]>(() => {
+  if (Array.isArray(props.post.photos) && props.post.photos.length > 0) {
+    return props.post.photos.map((item) => {
+      if (typeof item === "string") {
+        return {
+          url: item,
+          type: "image" as const
+        };
+      }
+      return item;
+    });
+  }
+  if (props.post.imageUrl) {
+    return [
+      {
+        url: props.post.imageUrl,
+        type: "image" as const
+      }
+    ];
+  }
+  return [];
+});
+
+const visibleMediaList = computed(() => {
+  return mediaList.value.slice(0, 4);
+});
+
+const overflowCount = computed(() => {
+  return Math.max(0, mediaList.value.length - 4);
+});
+
+const formatMediaDuration = (seconds?: number): string => {
+  if (!seconds) return "";
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs.toString().padStart(2, "0")}`;
+};
+
+const handleImageError = () => {
+  imageFailed.value = true;
+};
 
 const handleShareClick = (e?: MouseEvent) => {
   if (e) {
@@ -369,15 +440,50 @@ const handleCommentClick = () => {
   line-height: 1.3;
 }
 
-/* Image Area */
+/* Media Gallery Area */
 .post-media-box {
   width: 100%;
   border-radius: 12px;
   overflow: hidden;
   background: var(--app-surface-secondary);
   position: relative;
+  display: grid;
+  gap: 4px;
+}
+
+.post-media-box.media-count-1 {
+  grid-template-columns: 1fr;
   aspect-ratio: 16 / 10;
   max-height: 240px;
+}
+
+.post-media-box.media-count-2 {
+  grid-template-columns: 1fr 1fr;
+  height: 180px;
+}
+
+.post-media-box.media-count-3 {
+  grid-template-columns: 2fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  height: 200px;
+}
+
+.post-media-box.media-count-3 .feed-media-cell:first-child {
+  grid-row: 1 / 3;
+}
+
+.post-media-box.media-count-4 {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  height: 200px;
+}
+
+.feed-media-cell {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--app-surface-secondary);
 }
 
 .post-image {
@@ -385,6 +491,41 @@ const handleCommentClick = () => {
   height: 100%;
   object-fit: cover;
   display: block;
+}
+
+.feed-video-badge {
+  position: absolute;
+  bottom: 6px;
+  left: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.72);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 600;
+  backdrop-filter: blur(4px);
+  z-index: 2;
+}
+
+.feed-video-badge .video-icon {
+  flex-shrink: 0;
+}
+
+.feed-media-overflow {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  font-size: 20px;
+  font-weight: 700;
+  z-index: 3;
 }
 
 .post-description {

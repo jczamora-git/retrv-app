@@ -315,11 +315,11 @@ const handleRefresh = async (event: CustomEvent) => {
 
 const handleTabSelect = (tab: "home" | "messages" | "profile") => {
   if (tab === "home") {
-    router.push("/tabs/home");
+    router.push({ name: "Home" });
   } else if (tab === "messages") {
-    router.push("/tabs/messages");
+    router.push({ name: "Messages" });
   } else {
-    router.push("/tabs/profile");
+    router.push({ name: "Profile" });
   }
 };
 
