@@ -256,22 +256,17 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch, watchEffect, type Component } from "vue";
+import { computed, nextTick, onMounted, ref, watchEffect } from "vue";
 import {
   IonContent,
   IonHeader,
   IonPage,
   IonRefresher,
   IonRefresherContent,
-  IonToolbar,
-  toastController
+  IonToolbar
 } from "@ionic/vue";
 import {
   Bell,
-  LayoutGrid,
-  CircleHelp,
-  SearchCheck,
-  BadgeCheck,
   Search,
   X,
   AlertCircle,
@@ -287,22 +282,34 @@ import { useCategories } from "../composables/useCategories";
 import { usePosts } from "../composables/usePosts";
 import { useNotifications } from "../composables/useNotifications";
 import { useProfiles } from "../composables/useProfiles";
+import { useFeedFilter } from "../composables/useFeedFilter";
 import { normalizeCategoryKey } from "../config/categories";
-import type { Post, PostFilter, PostFilters, PostFormData } from "../types/post";
+import type { PostFilters } from "../types/post";
 
 const {
   postsLoading,
   postsError,
   fetchPosts,
-  subscribeToPosts,
   getFilteredPosts,
   toggleHelpful,
-  isHelpfulByMe,
-  createPost
+  isHelpfulByMe
 } = usePosts();
 const { loadProfiles } = useProfiles();
 const { getSubcategoriesForCategory } = useCategories();
 const { unreadCount } = useNotifications();
+
+const {
+  searchQuery,
+  debouncedSearchQuery,
+  appliedFilters,
+  isSearchActive,
+  activeFilterCount,
+  hasActiveFilters,
+  filterButtonLabel,
+  filterTabs,
+  clearAllFilters,
+  clearSearch
+} = useFeedFilter();
 
 const showNotificationsModal = ref(false);
 
@@ -312,24 +319,7 @@ const unreadBadgeFormatted = computed(() => {
   return String(unreadCount.value);
 });
 
-const searchQuery = ref("");
-const debouncedSearchQuery = ref("");
-let searchDebounceTimer: any = null;
-
-watch(searchQuery, (newVal) => {
-  if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
-  searchDebounceTimer = setTimeout(() => {
-    debouncedSearchQuery.value = newVal;
-  }, 300);
-});
-
 const showFilterSheet = ref(false);
-const appliedFilters = ref<PostFilters>({
-  type: "All",
-  categories: [],
-  subcategories: []
-});
-const isSearchActive = ref(false);
 const searchInputRef = ref<HTMLInputElement | null>(null);
 
 const openSearch = async () => {
@@ -339,23 +329,9 @@ const openSearch = async () => {
 };
 
 const closeSearch = () => {
-  searchQuery.value = "";
-  debouncedSearchQuery.value = "";
+  clearSearch();
   isSearchActive.value = false;
 };
-
-interface FilterTabItem {
-  value: PostFilter;
-  label: string;
-  icon: Component;
-}
-
-const filterTabs: FilterTabItem[] = [
-  { value: "All", label: "All", icon: LayoutGrid },
-  { value: "Lost", label: "Lost", icon: CircleHelp },
-  { value: "Found", label: "Found", icon: SearchCheck },
-  { value: "Resolved", label: "Resolved", icon: BadgeCheck }
-];
 
 const showComposer = ref(false);
 const publishingPost = ref(false);
@@ -365,17 +341,6 @@ interface FilterChip {
   group: "category" | "subcategory";
   label: string;
 }
-
-const activeFilterCount = computed(() =>
-  (appliedFilters.value.type === "All" ? 0 : 1)
-  + appliedFilters.value.categories.length
-  + appliedFilters.value.subcategories.length
-);
-const hasActiveFilters = computed(() => activeFilterCount.value > 0);
-const filterButtonLabel = computed(() => hasActiveFilters.value
-  ? `Filter posts, ${activeFilterCount.value} active`
-  : "Filter posts"
-);
 
 const activeChips = computed<FilterChip[]>(() => [
   ...appliedFilters.value.categories.map((label) => ({
@@ -408,10 +373,6 @@ const removeChip = (chip: FilterChip) => {
   appliedFilters.value.subcategories = appliedFilters.value.subcategories.filter(
     (name) => allowedSubcategories.has(normalizeCategoryKey(name))
   );
-};
-
-const clearAllFilters = () => {
-  appliedFilters.value = { type: "All", categories: [], subcategories: [] };
 };
 
 const applyFilters = (filters: PostFilters) => {
@@ -911,5 +872,51 @@ const handleDirectCreate = () => {
 
 .dock-spacer {
   height: 70px;
+}
+
+/* Responsive adjustments for Tablet (< 1200px) and Desktop (>= 1200px) */
+@media (min-width: 768px) and (max-width: 1199.98px) {
+  .modern-container,
+  .header-inner-box {
+    max-width: var(--max-content-width, 720px);
+  }
+}
+
+@media (min-width: 1200px) {
+  .home-ion-header {
+    display: none !important;
+  }
+
+  .feed-content {
+    --overflow: visible !important;
+    overflow: visible !important;
+    height: auto !important;
+    contain: none !important;
+    position: static !important;
+  }
+
+  .modern-container {
+    padding: 24px 0 40px 0;
+    width: 100%;
+    max-width: var(--desktop-feed-width, 680px);
+  }
+
+  .categories-section {
+    margin-bottom: 4px;
+  }
+
+  .compact-filter-pill:hover {
+    background: var(--app-surface-secondary);
+    color: var(--app-text-primary);
+  }
+
+  .compact-filter-pill.active:hover {
+    background: var(--app-primary-soft);
+    color: var(--app-primary);
+  }
+
+  .dock-spacer {
+    display: none !important;
+  }
 }
 </style>

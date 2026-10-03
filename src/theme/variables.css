@@ -51,8 +51,12 @@
   --ion-color-danger-shade: #d93838;
   --ion-color-danger-tint: #f25757;
 
-  /* App Dimensions */
+  /* App Dimensions & Responsive Tokens */
   --max-content-width: 600px;
+  --desktop-max-width: 1380px;
+  --desktop-feed-width: 660px;
+  --desktop-sidebar-width: 230px;
+  --desktop-right-rail-width: 280px;
 
   /* ----------------------------------------------------
      LIGHT THEME (Default)
@@ -223,6 +227,107 @@ ion-content::part(scroll) {
   margin: 0 auto;
   width: 100%;
   position: relative;
+}
+
+/* Tablet Responsive Container Rules (< 1200px) */
+@media (min-width: 768px) and (max-width: 1199.98px) {
+  :root {
+    --max-content-width: 720px;
+  }
+}
+
+/* Desktop Responsive Container & Single-Scroll Architecture (>= 1200px) */
+@media (min-width: 1200px) {
+  :root {
+    --max-content-width: 680px;
+  }
+
+  /* Make routed views inside desktop outlet static in document flow */
+  .outlet-viewport ion-router-outlet,
+  .outlet-viewport ion-page {
+    position: static !important;
+    height: auto !important;
+    min-height: 100% !important;
+    overflow: visible !important;
+    contain: none !important;
+  }
+
+  /* Deactivate internal scrolling on center feed so desktop shell is the single scroll owner */
+  .outlet-viewport ion-content {
+    --overflow: visible !important;
+    overflow: visible !important;
+    height: auto !important;
+    contain: none !important;
+    position: static !important;
+  }
+
+  .outlet-viewport ion-content::part(scroll) {
+    position: static !important;
+    height: auto !important;
+    overflow: visible !important;
+    contain: none !important;
+  }
+
+  .outlet-viewport ion-content #background-content {
+    display: none !important;
+  }
+
+  .outlet-viewport ion-refresher {
+    display: none !important;
+  }
+}
+
+/* Responsive Sheet / Modal Presentation on Tablet (< 1200px) */
+@media (min-width: 768px) and (max-width: 1199.98px) {
+  ion-modal.filter-sheet-modal,
+  ion-modal.notifications-sheet-modal,
+  ion-modal {
+    --width: 540px;
+    --max-width: 90vw;
+    --height: auto;
+    --max-height: 85vh;
+    --border-radius: 20px;
+  }
+
+  ion-modal::part(content) {
+    border-radius: 20px;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.16);
+  }
+}
+
+/* Desktop Modals (>= 1200px) */
+@media (min-width: 1200px) {
+  /* Default Desktop Utility Modals (Filters, Notifications, etc.) */
+  ion-modal.filter-sheet-modal,
+  ion-modal.notifications-sheet-modal,
+  ion-modal:not(.post-composer-modal) {
+    --width: 540px;
+    --max-width: 90vw;
+    --height: auto;
+    --max-height: 85vh;
+    --border-radius: 20px;
+  }
+
+  ion-modal:not(.post-composer-modal)::part(content) {
+    border-radius: 20px;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.16);
+  }
+
+  /* Desktop Refined Create Post Modal (>= 1200px) - Tall, Immersive Near Full-Height Presentation */
+  ion-modal.post-composer-modal {
+    --width: 640px;
+    --max-width: 90vw;
+    --height: 88vh;
+    --max-height: 92vh;
+    --border-radius: 24px;
+    --backdrop-opacity: 0.45;
+  }
+
+  ion-modal.post-composer-modal::part(content) {
+    border-radius: 24px;
+    margin-bottom: 24px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+  }
 }
 
 /* Smooth Tap Response */

@@ -158,14 +158,14 @@ import ShareModal from "./ShareModal.vue";
 import AchievementBadge from "./AchievementBadge.vue";
 import { hasValidDescription, type Post } from "../types/post";
 import { useLatestComment } from "../composables/useLatestComment";
-import { useProfiles, getProfileById, loadProfile } from "../composables/useProfiles";
+import { getProfileById, loadProfile } from "../composables/useProfiles";
 
 const props = defineProps<{
   post: Post;
   isHelpful?: boolean;
 }>();
 
-const emit = defineEmits<{
+defineEmits<{
   (e: "toggle-helpful", id: string): void;
 }>();
 
@@ -293,8 +293,16 @@ const handleCommentClick = () => {
   flex-direction: column;
   gap: 10px;
   cursor: pointer;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
   user-select: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .post-card:hover {
+    border-color: rgba(38, 64, 219, 0.28);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.05);
+    transform: translateY(-1px);
+  }
 }
 
 .post-card:active {

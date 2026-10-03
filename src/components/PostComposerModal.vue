@@ -1,8 +1,9 @@
 <template>
   <ion-modal
+    class="post-composer-modal"
     :is-open="isOpen"
-    :breakpoints="[0, 0.95, 1]"
-    :initial-breakpoint="0.95"
+    :breakpoints="modalBreakpoints"
+    :initial-breakpoint="modalInitialBreakpoint"
     @did-dismiss="handleClose"
   >
     <div class="composer-sheet">
@@ -184,7 +185,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onUnmounted, reactive, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { IonModal, IonSpinner, toastController } from "@ionic/vue";
 import {
   MapPin,
@@ -225,6 +226,41 @@ const emit = defineEmits<{
 
 const { currentProfile } = useAuth();
 const { createPost } = usePosts();
+
+// Responsive modal behavior: desktop (>= 1200px) uses full [0, 1] breakpoint opening at 1 (100% height)
+const isDesktop = ref(typeof window !== "undefined" ? window.innerWidth >= 1200 : false);
+
+const updateIsDesktop = () => {
+  if (typeof window !== "undefined") {
+    isDesktop.value = window.innerWidth >= 1200;
+  }
+};
+
+onMounted(() => {
+  updateIsDesktop();
+  window.addEventListener("resize", updateIsDesktop, { passive: true });
+});
+
+onUnmounted(() => {
+  window.removeEventListener("resize", updateIsDesktop);
+});
+
+watch(
+  () => props.isOpen,
+  (open) => {
+    if (open) {
+      updateIsDesktop();
+    }
+  }
+);
+
+const modalBreakpoints = computed(() => {
+  return isDesktop.value ? [0, 1] : [0, 0.95, 1];
+});
+
+const modalInitialBreakpoint = computed(() => {
+  return isDesktop.value ? 1 : 0.95;
+});
 
 const submissionState = ref<"idle" | "sending" | "failed" | "sent">("idle");
 const activeClientRequestId = ref<string>(generateClientRequestId());
@@ -798,5 +834,29 @@ const handleClose = () => {
 
 .globe-icon {
   flex-shrink: 0;
+}
+
+/* Desktop Refined Presentation (>= 1200px) */
+@media (min-width: 1200px) {
+  .composer-sheet {
+    border-radius: 24px;
+  }
+
+  .composer-header {
+    padding: 16px 24px;
+  }
+
+  .composer-header-title {
+    font-size: 17px;
+  }
+
+  .composer-body {
+    padding: 20px 24px 36px;
+    gap: 18px;
+  }
+
+  .composer-title-input {
+    font-size: 20px;
+  }
 }
 </style>

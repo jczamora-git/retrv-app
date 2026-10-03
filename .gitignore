@@ -46,3 +46,4 @@ server/data/
 *.pepk
 retrv-keys/
 retrv-keys
+android/app/release/
