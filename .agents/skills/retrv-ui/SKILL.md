@@ -30,7 +30,8 @@ description: Governs Ionic Vue presentation, view/component architecture, design
 2. **Reuse Existing Components & Composables:**
    - Do not duplicate data fetching or mutation logic across page views. Consume authoritative composables from `src/composables/`.
 3. **Desktop vs Mobile Separation:**
-   - Desktop views (`src/views/desktop/`) MUST NOT use Ionic layout primitives (`IonPage`, `IonContent`, `IonTabs`).
+   - Top-level route components under root `IonRouterOutlet` MUST maintain `<ion-page>` at their template root for view-stack coordination.
+   - Inside the desktop branch (`v-if="isDesktop"`), desktop views (`src/views/desktop/`) MUST NOT use Ionic layout primitives (`IonContent`, `IonTabs`, nested `IonRouterOutlet`).
    - DesktopNavSidebar MUST remain visible by default across desktop routes; only Messages and Profile explicitly opt out.
    - Do not add compensatory `margin-left` or fake column layout hacks to compensate for missing shell elements.
 4. **Respect Ionic Page Lifecycle on Mobile:**

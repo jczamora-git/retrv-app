@@ -275,6 +275,7 @@ For any task touching:
 - `DesktopContextRail.vue`
 - `TabsPage.vue`
 - `src/router/index.ts`
+- `PageHeader.vue`
 - Any desktop page view (`src/views/desktop/Desktop*Page.vue`)
 - Any new desktop feature (`>= 1200px`)
 
@@ -284,13 +285,15 @@ Agents **MUST READ FIRST**:
 3. [docs/desktop/DESKTOP-PAGES.md](file:///c:/Users/JC%20Zamora/Documents/retrv-app/docs/desktop/DESKTOP-PAGES.md)
 4. [docs/desktop/DESKTOP-CHECKLIST.md](file:///c:/Users/JC%20Zamora/Documents/retrv-app/docs/desktop/DESKTOP-CHECKLIST.md)
 
-### Core Desktop Invariants:
-1. **Single Canonical Sidebar:** Never recreate `DesktopNavSidebar.vue`. Exactly ONE canonical sidebar exists.
-2. **Visible by Default:** `DesktopNavSidebar` MUST remain visible by default across all desktop routes. Only explicit routes (Messages, Profile) opt out.
-3. **Boolean Prop Defaults:** In Vue 3, any boolean prop controlling visibility (`showSidebar?: boolean`) must explicitly specify `default: true` in `withDefaults`.
-4. **Pure Vue Desktop Views:** Desktop pages (`src/views/desktop/`) must use standard semantic HTML/Vue and MUST NOT be wrapped in Ionic layout primitives (`IonPage`, `IonContent`, `IonTabs`).
-5. **No `/tabs/` Navigations:** Active app navigation must use clean canonical named routes (`router.push({ name: "Home" })`). `/tabs/...` routes are legacy redirects only.
-6. **No Layout Hacks:** Never mask missing sidebar regressions with compensatory `margin-left` or fake column hacks.
+### Core Desktop & Routing Invariants:
+1. **IonPage Root Route Boundary:** Top-level route components rendered by Ionic's root `IonRouterOutlet` MUST maintain `<ion-page>` as their template root for view-stack and `.ion-page-hidden` coordination. Never remove `<ion-page>` from top-level routes.
+2. **Pure Vue Desktop Views:** Inside the route's desktop branch (`v-if="isDesktop"`), desktop views (`src/views/desktop/`) must use standard semantic HTML/Vue and MUST NOT be wrapped in Ionic layout primitives (`IonContent`, `IonTabs`, nested `IonRouterOutlet`).
+3. **Single Canonical Sidebar:** Never recreate `DesktopNavSidebar.vue`. Exactly ONE canonical sidebar exists.
+4. **Visible by Default:** `DesktopNavSidebar` MUST remain visible by default across all desktop routes. Only explicit routes (Messages, Profile) opt out.
+5. **Boolean Prop Defaults:** In Vue 3, any boolean prop controlling visibility (`showSidebar?: boolean`) must explicitly specify `default: true` in `withDefaults`.
+6. **Single Navigation per Action:** A single user action must produce exactly ONE router navigation. Never attach duplicate `@back` navigation handlers when `PageHeader` handles Back internally.
+7. **No `/tabs/` Navigations:** Active app navigation must use clean canonical named routes (`router.push({ name: "Home" })`). `/tabs/...` routes are legacy redirects only.
+8. **No Layout Hacks:** Never mask missing sidebar regressions with compensatory `margin-left` or fake column hacks.
 
 ---
 

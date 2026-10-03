@@ -70,16 +70,22 @@ Retrv desktop views must align with one of four established layout patterns:
 
 ## 3. Page Component Responsibilities
 
-### Desktop Page Components MUST:
-1. Handle route-specific data binding, filtering, tabs, and actions.
-2. Render explicit loading skeletons, empty state placeholders, and error recovery states.
-3. Reuse existing shared composables (`useAuth`, `usePosts`, `useNotifications`, `useChat`).
-4. Support clean standard HTML and CSS variable tokens.
+### Top-Level Route Component (e.g., `TabsPage.vue`, `PublicProfilePage.vue`)
+- **Root Element:** `<ion-page>` (mandatory for root `IonRouterOutlet` lifecycle management).
+- **Responsive Branching:** Evaluates `isDesktop (>= 1200px)`:
+  - `v-if="isDesktop"` -> mounts `DesktopWebShell` containing the desktop view.
+  - `v-else` -> mounts the mobile Ionic presentation (`IonTabs` or `IonContent`).
 
-### Desktop Page Components MUST NOT:
-1. Duplicate global chrome (`DesktopHeader`, `DesktopNavSidebar`, `AppDock`).
-2. Wrap content in Ionic containers (`IonPage`, `IonContent`, `IonTabs`).
-3. Maintain private, duplicated fetching logic when a shared composable exists.
+### Desktop Page Components (`src/views/desktop/Desktop*Page.vue`)
+- **MUST:**
+  1. Handle route-specific data binding, filtering, tabs, and actions.
+  2. Render explicit loading skeletons, empty state placeholders, and error recovery states.
+  3. Reuse existing shared composables (`useAuth`, `usePosts`, `useNotifications`, `useChat`).
+  4. Use pure standard HTML and CSS variable tokens.
+- **MUST NOT:**
+  1. Duplicate global chrome (`DesktopHeader`, `DesktopNavSidebar`, `AppDock`).
+  2. Wrap desktop layout content in Ionic layout primitives (`IonPage`, `IonContent`, `IonTabs`).
+  3. Maintain private, duplicated fetching logic when a shared composable exists.
 
 ---
 
@@ -97,31 +103,62 @@ Retrv desktop views must align with one of four established layout patterns:
 ## 5. Desktop Route Creation Recipe
 
 When creating a new desktop route:
-1. **Define Canonical Route:** Register clean path (e.g., `/explore`) in [src/router/index.ts](file:///c:/Users/JC%20Zamora/Documents/retrv-app/src/router/index.ts).
-2. **Select Approved Pattern:** Choose Pattern A, B, C, or D.
-3. **Configure Shell Policy:** Determine visibility for Header, Sidebar, and Context Rail.
-4. **Create Pure Vue Component:** Create `src/views/desktop/Desktop<Name>Page.vue` without Ionic wrappers.
-5. **Connect Shared Composables:** Import data hooks from `src/composables/`.
-6. **Preserve Mobile Route:** Keep or implement the `< 1200px` mobile Ionic view cleanly separated.
-7. **Verify Route Table:** Update [DESKTOP-ROUTES.md](file:///c:/Users/JC%20Zamora/Documents/retrv-app/docs/desktop/DESKTOP-ROUTES.md).
-8. **Verify Shell Regression Safety:** Ensure Home (`/`) retains its `240px` sidebar and context rail.
+1. **Determine Outlet Parentage:** Does this route render under Ionic's root `IonRouterOutlet`? If yes, keep `<ion-page>` at the top-level route boundary.
+2. **Define Canonical Route:** Register clean path (e.g., `/explore`) in [src/router/index.ts](file:///c:/Users/JC%20Zamora/Documents/retrv-app/src/router/index.ts).
+3. **Select Approved Pattern:** Choose Pattern A, B, C, or D.
+4. **Configure Shell Policy:** Determine visibility for Header, Sidebar, and Context Rail in `DesktopWebShell.vue`.
+5. **Create Pure Desktop Component:** Create `src/views/desktop/Desktop<Name>Page.vue` using pure Vue markup (no `IonContent`).
+6. **Connect Shared Composables:** Import data hooks from `src/composables/`.
+7. **Preserve Mobile Route:** Keep or implement the `< 1200px` mobile Ionic view cleanly separated.
+8. **Verify Route Table:** Update [DESKTOP-ROUTES.md](file:///c:/Users/JC%20Zamora/Documents/retrv-app/docs/desktop/DESKTOP-ROUTES.md).
+9. **Verify Shell Regression Safety:** Ensure Home (`/`) retains its `240px` sidebar and context rail.
 
 ---
 
-## 6. New Desktop Page Planning Template
+## 6. Routed Desktop Page Template
 
-```markdown
-### New Desktop Page Definition
-- **Feature Name:** [e.g., Explore Map]
-- **Canonical Route:** `/explore`
-- **Route Name:** `Explore`
-- **Layout Pattern:** [Pattern A / B / C / D]
-- **DesktopHeader:** [VISIBLE / HIDDEN]
-- **DesktopNavSidebar:** [VISIBLE / HIDDEN]
-- **DesktopContextRail:** [VISIBLE / HIDDEN]
-- **Page-Owned Rail:** [YES / NO]
-- **Scroll Ownership:** [OUTER DOCUMENT / INTERNAL WORKSPACE]
-- **Mobile Counterpart:** [Dedicated mobile view in src/views/ or modal]
-- **Shared Composables Used:** [e.g., usePosts, useCategories]
-- **Desktop Component Path:** `src/views/desktop/DesktopExplorePage.vue`
+```vue
+<!-- Example Top-Level Route View (src/views/ExplorePage.vue) -->
+<template>
+  <ion-page class="explore-root-page">
+    <!-- DESKTOP WEB SHELL (>= 1200px) -->
+    <DesktopWebShell
+      v-if="isDesktop"
+      current-tab="home"
+      @open-create="openComposer"
+    >
+      <DesktopExplorePage />
+    </DesktopWebShell>
+
+    <!-- MOBILE / TABLET IONIC SHELL (< 1200px) -->
+    <div v-else class="mobile-explore-shell">
+      <PageHeader title="Explore" :show-back="true" default-back-url="/" />
+      <ion-content>
+        <!-- Mobile Content -->
+      </ion-content>
+    </div>
+  </ion-page>
+</template>
+
+<script setup lang="ts">
+import { ref, onMounted, onUnmounted } from "vue";
+import { IonPage, IonContent } from "@ionic/vue";
+import DesktopWebShell from "../components/desktop/DesktopWebShell.vue";
+import DesktopExplorePage from "./desktop/DesktopExplorePage.vue";
+import PageHeader from "../components/PageHeader.vue";
+
+const isDesktop = ref(typeof window !== "undefined" ? window.matchMedia("(min-width: 1200px)").matches : false);
+// MediaQuery listener setup...
+</script>
+
+<style scoped>
+.explore-root-page {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  contain: none !important;
+  background: var(--app-bg);
+}
+</style>
 ```

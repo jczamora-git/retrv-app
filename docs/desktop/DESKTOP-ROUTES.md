@@ -20,7 +20,26 @@ The desktop shell (`DesktopWebShell`) coordinates global chrome elements based o
 
 ---
 
-## 2. Legacy Route Compatibility & Redirect Invariant
+## 2. Route Transition Smoke Test Matrix
+
+When changing routing, shell mounting, or navigation headers, run through the following smoke test matrix to verify that the visible view and URL stay synchronized:
+
+| Transition Flow | Expected URL | Expected Visible View | Prior Page Status |
+| :--- | :--- | :--- | :--- |
+| `Home` → `Settings` | `/settings` | SettingsPage | Home hidden |
+| `Settings` → `Home` | `/` | DesktopHomePage | Settings hidden (`.ion-page-hidden`) |
+| `Profile` → `Settings` | `/settings` | SettingsPage | Profile hidden |
+| `Settings` → `NotificationSettings` | `/settings/notifications`| NotificationSettingsPage | Settings hidden |
+| `NotificationSettings` → Click `Back` | `/settings` | SettingsPage | NotificationSettings hidden |
+| `Settings` → `Security` → Click `Back` | `/settings` | SettingsPage | Security hidden |
+| `Settings` → `Help` → Click `Back` | `/settings` | SettingsPage | Help hidden |
+| `NotificationSettings` → Click `Home` | `/` | DesktopHomePage | NotificationSettings hidden |
+
+*At all times, `window.location.pathname === current active route`.*
+
+---
+
+## 3. Legacy Route Compatibility & Redirect Invariant
 
 > [!IMPORTANT]
 > **No Active `/tabs` URLs:**
@@ -43,7 +62,7 @@ The desktop shell (`DesktopWebShell`) coordinates global chrome elements based o
 
 ---
 
-## 3. Named Route Invariant
+## 4. Named Route Invariant
 
 Always prefer typed named routes when navigating within components:
 
@@ -55,11 +74,3 @@ Always prefer typed named routes when navigating within components:
 | **Notifications** | `router.push({ name: "Notifications" })` | `router.push("/notifications")`, `router.push("/tabs/notifications")` |
 | **Settings** | `router.push({ name: "Settings" })` | `router.push("/settings")` |
 | **Chat Thread** | `router.push({ name: "Chat", params: { conversationId } })` | Hardcoded string paths |
-
----
-
-## 4. Router as Single Source of Truth
-
-- **Active Tab Determination:** Derive active navigation highlights directly from `route.name` or `route.path`.
-- **No Manual Desynchronized State:** Do NOT maintain standalone mutable `currentTab` refs or rely on `window.location.pathname` inside sub-components.
-- **Route Guards:** Authentication and profile-completion guards in [src/router/index.ts](file:///c:/Users/JC%20Zamora/Documents/retrv-app/src/router/index.ts) handle protected route access before components mount.
